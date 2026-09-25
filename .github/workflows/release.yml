@@ -1,0 +1,93 @@
+name: Build Windows release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-build.txt
+            Downloader/requirements-dev.txt
+
+      - name: Verify FFmpeg input
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "ffmpeg.exe")) {
+            throw "Place the approved ffmpeg.exe at the repository root before creating a release."
+          }
+          $expectedHash = "228D7A8556258DE907FDB55F36850078EBC7680B84EC30D84EA02E99BEC1D1EB"
+          $actualHash = (Get-FileHash -Path "ffmpeg.exe" -Algorithm SHA256).Hash
+          if ($actualHash -ne $expectedHash) {
+            throw "ffmpeg.exe SHA-256 mismatch! Expected $expectedHash but got $actualHash"
+          }
+
+      - name: Verify release configuration and notices
+        shell: pwsh
+        run: |
+          $config = Get-Content "Downloader/src/core/config.py" -Raw
+          if ($config -notmatch 'GITHUB_REPO = "([^"]+)"') {
+            throw "Set Config.GITHUB_REPO to this repository before creating a release."
+          }
+          if ($Matches[1] -ne "${{ github.repository }}") {
+            throw "Config.GITHUB_REPO must match ${{ github.repository }} for in-app updates."
+          }
+          if (-not (Test-Path "LICENSE")) {
+            throw "Add the selected project LICENSE before distributing a package."
+          }
+          if (-not (Test-Path "THIRD_PARTY_NOTICES.md")) {
+            throw "Third-party notices must be included with every release."
+          }
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-build.txt -r Downloader/requirements-dev.txt
+
+      - name: Run quality gates
+        working-directory: Downloader
+        run: |
+          python -m compileall -q src main.py
+          python tools/check_rules.py
+          python tools/check_ai_slop.py
+          ruff check src tests
+          pytest -q
+
+      - name: Build application
+        run: pyinstaller --noconfirm --clean MediaDownloaderPRO.spec
+
+      - name: Package Windows x64 build
+        shell: pwsh
+        run: |
+          $asset = "MediaDownloaderPRO-Windows-x64.zip"
+          Compress-Archive -Path "dist/MediaDownloaderPRO/*" -DestinationPath $asset -Force
+          (Get-FileHash $asset -Algorithm SHA256).Hash.ToLower() | Out-File "$asset.sha256" -Encoding ascii
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" `
+            "MediaDownloaderPRO-Windows-x64.zip" `
+            "MediaDownloaderPRO-Windows-x64.zip.sha256" `
+            --title "Media Downloader PRO ${{ github.ref_name }}" `
+            --generate-notes `
+            --verify-tag `
+            --draft
+          gh release edit "${{ github.ref_name }}" --draft=false
