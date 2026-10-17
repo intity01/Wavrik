@@ -14,6 +14,7 @@ from .workspace_interactions import WorkspaceInteractionMixin
 
 class WorkspaceInterface(WorkspaceInteractionMixin, QWidget):
     historyRequested = pyqtSignal()
+    fileDownloaded = pyqtSignal(str)
 
     def __init__(self, downloader, historyManager, config, parent=None):
         super().__init__(parent)
@@ -122,4 +123,7 @@ class WorkspaceInterface(WorkspaceInteractionMixin, QWidget):
         card = self._cards.get(url)
         if card:
             card.finish(result)
+        fp = getattr(result, "file_path", None) or (result.get("file_path") if isinstance(result, dict) else None)
+        if fp:
+            self.fileDownloaded.emit(str(fp))
         self._updateEmptyState()

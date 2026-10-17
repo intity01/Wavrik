@@ -60,6 +60,9 @@ class MediaDownloaderUI(WindowLifecycleMixin, QMainWindow):
         for name, page in pages:
             page.setObjectName(name)
             self.stackedWidget.addWidget(page)
+        self.pageWorkspace.fileDownloaded.connect(self.pageLibrary.enqueueAutoAnalyze)
+        self.pageAudioTools.analysisCompleted.connect(self.pageLibrary.storeAnalysisResult)
+        self.pageAudioTools.fileExported.connect(self.pageLibrary.enqueueAutoAnalyze)
         self.pageLibrary.redownloadRequested.connect(self._redownload)
         self.pageLibrary.openInAudioToolsRequested.connect(self._open_in_audio_tools)
         self.pageSettings.themeChanged.connect(self._refresh_theme)
@@ -94,7 +97,7 @@ class MediaDownloaderUI(WindowLifecycleMixin, QMainWindow):
 
     def _open_in_audio_tools(self, file_path: str) -> None:
         self.switchTo(self.pageAudioTools)
-        self.pageAudioTools.loadFile(file_path)
+        self.pageAudioTools.loadFile(file_path, self.pageLibrary.getCachedAnalysis(file_path))
 
     def _refresh_theme(self) -> None:
         applyTheme(self, self._cfg)

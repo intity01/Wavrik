@@ -16,12 +16,8 @@ def build_ui(page) -> None:
     layout = QVBoxLayout(content)
     layout.setContentsMargins(24, 22, 24, 22)
     layout.setSpacing(14)
-    layout.addWidget(QLabel("Audio Tools", objectName="PageTitle"))
-    layout.addWidget(QLabel("Estimate Key & BPM, shift pitch with Rubber Band R3, A/B audition, and export safely.", objectName="PageSubtitle"))
-    layout.addWidget(_source_card(page))
-    layout.addWidget(_analysis_card(page))
-    layout.addWidget(_pitch_card(page))
-    layout.addWidget(_export_card(page))
+    for w in (QLabel("Audio Tools", objectName="PageTitle"), QLabel("Estimate Key & BPM, shift pitch & tempo with Rubber Band R3, and export safely.", objectName="PageSubtitle"), _source_card(page), _analysis_card(page), _pitch_card(page), _export_card(page)):
+        layout.addWidget(w)
     layout.addStretch(1)
     scroll.setWidget(content)
     root.addWidget(scroll)
@@ -41,37 +37,52 @@ def _source_card(page) -> QFrame:
 
 
 def _analysis_card(page) -> QFrame:
-    card, layout = _card("Key & BPM Analysis")
+    card, layout = _card("Key, Section Modulation & BPM Analysis")
     page.badgeLabel = QLabel("Experimental / Estimate · ทดลอง / ค่าประมาณ", objectName="ExperimentalBadge")
+    page.sectionKeyLabel = QLabel("Section Key: -- (1st Half vs 2nd Half)", objectName="MutedText")
     layout.addWidget(page.badgeLabel)
+    layout.addWidget(page.sectionKeyLabel)
     key_row = QHBoxLayout()
-    page.detectedKeyCombo = ComboBox()
+    page.detectedKeyCombo, page.camelotLabel, page.reanalyzeBtn = ComboBox(), QLabel("Camelot: 8B", objectName="StepBadge"), ToolButton("Re-analyze")
     page.detectedKeyCombo.addItems(list(ALL_KEYS))
     page.detectedKeyCombo.currentTextChanged.connect(page._update_preview_labels)
-    page.camelotLabel = QLabel("Camelot: 8B", objectName="StepBadge")
-    page.reanalyzeBtn = ToolButton("Re-analyze")
     page.reanalyzeBtn.clicked.connect(page._reanalyze)
     for w in (QLabel("Detected / Override Key:"), page.detectedKeyCombo, page.camelotLabel):
         key_row.addWidget(w)
     key_row.addStretch(1)
     key_row.addWidget(page.reanalyzeBtn)
-    layout.addLayout(key_row)
-    layout.addLayout(_bpm_row(page))
+    for row in (key_row, _candidates_row(page), _bpm_row(page)):
+        layout.addLayout(row)
     return card
+
+
+def _candidates_row(page) -> QHBoxLayout:
+    row = QHBoxLayout()
+    row.addWidget(QLabel("Top-3 Candidates:", objectName="MutedText"))
+    page.candButtons = [ToolButton(f"#{i} --") for i in (1, 2, 3)]
+    for idx, btn in enumerate(page.candButtons):
+        btn.clicked.connect(lambda _c=False, i=idx: page._select_candidate(i))
+        row.addWidget(btn)
+    row.addStretch(1)
+    return row
 
 
 def _bpm_row(page) -> QHBoxLayout:
     row = QHBoxLayout()
-    page.bpmSpin = QDoubleSpinBox()
-    page.bpmSpin.setRange(30.0, 300.0)
-    page.bpmSpin.setDecimals(1)
-    page.bpmSpin.setSingleStep(0.5)
-    page.bpmSpin.setValue(120.0)
-    page.halfBpmBtn = ToolButton("0.5x BPM")
-    page.doubleBpmBtn = ToolButton("2x BPM")
+    page.bpmSpin, page.targetBpmSpin = QDoubleSpinBox(), QDoubleSpinBox()
+    for sp in (page.bpmSpin, page.targetBpmSpin):
+        sp.setRange(30.0, 300.0)
+        sp.setDecimals(1)
+        sp.setSingleStep(0.5)
+        sp.setValue(120.0)
+    page.bpmSpin.valueChanged.connect(page._on_source_bpm_changed)
+    page.targetBpmSpin.valueChanged.connect(page._update_preview_labels)
+    page.halfBpmBtn, page.doubleBpmBtn, page.resetTempoBtn = ToolButton("0.5x BPM"), ToolButton("2x BPM"), ToolButton("1.0x Tempo")
+    page.tempoRatioLabel = QLabel("Stretch: 1.00x (100%)", objectName="StepBadge")
     page.halfBpmBtn.clicked.connect(lambda: page.bpmSpin.setValue(round(max(30.0, page.bpmSpin.value() * 0.5), 1)))
     page.doubleBpmBtn.clicked.connect(lambda: page.bpmSpin.setValue(round(min(300.0, page.bpmSpin.value() * 2.0), 1)))
-    for w in (QLabel("Estimated BPM:"), page.bpmSpin, page.halfBpmBtn, page.doubleBpmBtn):
+    page.resetTempoBtn.clicked.connect(lambda: page.targetBpmSpin.setValue(page.bpmSpin.value()))
+    for w in (QLabel("Source BPM:"), page.bpmSpin, page.halfBpmBtn, page.doubleBpmBtn, QLabel("Target BPM:"), page.targetBpmSpin, page.resetTempoBtn, page.tempoRatioLabel):
         row.addWidget(w)
     row.addStretch(1)
     return row
@@ -80,9 +91,7 @@ def _bpm_row(page) -> QHBoxLayout:
 def _pitch_card(page) -> QFrame:
     card, layout = _card("Pitch Shift & Engine (-12 to +12 Semitones)")
     shift_row = QHBoxLayout()
-    page.semitoneSpin = QSpinBox()
-    page.semitoneSpin.setRange(-12, 12)
-    page.semitoneSpin.setValue(0)
+    page.semitoneSpin = QSpinBox(minimum=-12, maximum=12, value=0)
     page.semitoneSpin.valueChanged.connect(page._update_preview_labels)
     shift_row.addWidget(QLabel("Semitones:"))
     shift_row.addWidget(page.semitoneSpin)
@@ -106,32 +115,27 @@ def _engine_row(page) -> QHBoxLayout:
     for label, key in (("WAV 24-bit (Cubase / DAW Ready)", "wav"), ("FLAC Lossless", "flac"), ("MP3 320 kbps", "mp3")):
         page.formatCombo.addItem(label, key)
     page.formatCombo.currentIndexChanged.connect(page._update_preview_labels)
-    row.addWidget(QLabel("Engine:"))
-    row.addWidget(page.engineCombo, 1)
-    row.addWidget(QLabel("Format:"))
-    row.addWidget(page.formatCombo, 1)
+    for w, stretch in ((QLabel("Engine:"), 0), (page.engineCombo, 1), (QLabel("Format:"), 0), (page.formatCombo, 1)):
+        row.addWidget(w, stretch)
     return row
 
 
 def _export_card(page) -> QFrame:
     card, layout = _card("A/B Audition & Non-Destructive Export")
-    page.outputPreviewLabel = QLabel("Original file is never overwritten.", objectName="MutedText")
-    page.statusLabel = QLabel("Load an audio file to begin.", objectName="MutedText")
+    page.outputPreviewLabel, page.statusLabel = QLabel("Original file is never overwritten.", objectName="MutedText"), QLabel("Load an audio file to begin.", objectName="MutedText")
     actions = QHBoxLayout()
     page.previewOrigBtn, page.previewShiftedBtn = ToolButton("Play Original (A)"), ToolButton("Preview Shifted (B)")
     page.exportBtn, page.openFolderBtn = PrimaryPushButton("Export Shifted Copy"), PushButton("Show in folder")
     page.openFolderBtn.hide()
-    page.previewOrigBtn.clicked.connect(page._play_original)
-    page.previewShiftedBtn.clicked.connect(page._preview_shifted)
-    page.exportBtn.clicked.connect(page._export_shifted)
-    page.openFolderBtn.clicked.connect(page._open_export_folder)
-    actions.addWidget(page.previewOrigBtn)
-    actions.addWidget(page.previewShiftedBtn)
+    for btn, fn in ((page.previewOrigBtn, page._play_original), (page.previewShiftedBtn, page._preview_shifted), (page.exportBtn, page._export_shifted), (page.openFolderBtn, page._open_export_folder)):
+        btn.clicked.connect(fn)
+    for w in (page.previewOrigBtn, page.previewShiftedBtn):
+        actions.addWidget(w)
     actions.addStretch(1)
     actions.addWidget(page.openFolderBtn)
     actions.addWidget(page.exportBtn)
-    layout.addWidget(page.outputPreviewLabel)
-    layout.addWidget(page.statusLabel)
+    for w in (page.outputPreviewLabel, page.statusLabel):
+        layout.addWidget(w)
     layout.addLayout(actions)
     return card
 

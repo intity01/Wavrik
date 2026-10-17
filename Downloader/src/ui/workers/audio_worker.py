@@ -25,6 +25,7 @@ class PitchJob:
     engine: str = "r3_finer"
     fmt: str = "wav"
     is_preview: bool = False
+    tempo_ratio: float = 1.0
 
 
 class AnalyzeAudioWorker(QRunnable):
@@ -36,6 +37,7 @@ class AnalyzeAudioWorker(QRunnable):
     def run(self) -> None:
         try:
             result = analyze_audio_file(self._path)
+            result["filePath"] = str(self._path)
             self._signals.analyzed.emit(result)
         except Exception as exc:
             self._signals.error.emit(f"Analysis failed: {exc}")
@@ -55,6 +57,7 @@ class RenderPitchWorker(QRunnable):
                 self._job.semitones,
                 self._job.engine,
                 self._job.fmt,
+                self._job.tempo_ratio,
             )
             self._signals.rendered.emit(str(out), self._job.is_preview)
         except Exception as exc:

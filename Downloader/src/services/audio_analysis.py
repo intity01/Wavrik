@@ -10,7 +10,7 @@ import wave
 
 from src.core.runtime import find_ffmpeg
 from src.services.audio_dsp import estimate_bpm as _estimate_bpm
-from src.services.audio_hpcp import extract_key_candidates as _extract_key_candidates
+from src.services.audio_hpcp import extract_key_and_sections as _extract_key_and_sections
 
 NOTES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 ALL_KEYS = tuple([*(f"{n} major" for n in NOTES), *(f"{n} minor" for n in NOTES)])
@@ -90,11 +90,14 @@ def analyze_audio_file(path: str | Path, max_seconds: int = 250) -> dict:
     if len(samples) < sr // 2 or max((abs(x) for x in samples), default=0.0) < 1e-5:
         return {"key": "C major", "camelot": "8B", "bpm": 120.0, "confidence": 0, "status": "unavailable", "key_candidates": []}
     bpm_slice = samples[10 * sr : 160 * sr] if len(samples) > 40 * sr else samples
-    candidates = _extract_key_candidates(samples, sr)
+    candidates, k1, k2 = _extract_key_and_sections(samples, sr)
     top_key, r1 = candidates[0]["key"], float(candidates[0]["correlation"])
     sec_key, r2 = candidates[1]["key"], float(candidates[1]["correlation"])
     _sc, rel = mirex_key_score(top_key, sec_key)
     conf = min(99, max(50, int(round(r1 * 88.0 + min(0.15, max(0.0, r1 - r2)) * 90.0))))
+    mod_sc, mod_rel = mirex_key_score(k2, k1)
+    modulated = mod_sc < 1.0
+    sec_txt = f"Modulation: 1st Half {k1} ({camelot_code(k1)}) → 2nd Half {k2} ({camelot_code(k2)} · {mod_rel})" if modulated else f"Stable: {k1} ({camelot_code(k1)}) throughout"
     return {
         "key": top_key,
         "enharmonic": enharmonic_key(top_key),
@@ -102,6 +105,10 @@ def analyze_audio_file(path: str | Path, max_seconds: int = 250) -> dict:
         "bpm": _estimate_bpm(bpm_slice, sr),
         "confidence": conf,
         "relation": rel,
+        "first_half_key": k1,
+        "second_half_key": k2,
+        "modulated": modulated,
+        "section_summary": sec_txt,
         "status": "estimate",
         "badge": f"Experimental / Estimate · ความเชื่อมั่น {conf}% (2nd: {sec_key} · {rel})",
         "key_candidates": candidates[:3],

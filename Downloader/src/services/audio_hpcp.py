@@ -38,56 +38,59 @@ _SW_BANDS = _build_sw_bands()
 
 
 def extract_key_candidates(samples: list[float], sr: int = 16000) -> list[dict]:
+    return extract_key_and_sections(samples, sr)[0]
+
+
+def extract_key_and_sections(samples: list[float], sr: int = 16000) -> tuple[list[dict], str, str]:
     padded = [0.0] * (_N // 2) + samples + [0.0] * (_N // 2)
     starts = list(range(0, max(1, len(padded) - _N + 1), _N))
-    hpcp = [0.0] * 12
+    hp1, hp2, mid = [0.0] * 12, [0.0] * 12, max(1, len(starts) // 2)
     for idx in range(0, len(starts), 2):
         s1 = starts[idx]
         f1 = [padded[s1 + i] * _WIN[i] for i in range(_N)]
+        dst1 = hp1 if idx < mid else hp2
         if idx + 1 < len(starts):
             s2 = starts[idx + 1]
             sp1, sp2 = _fft_pair_mag(f1, [padded[s2 + i] * _WIN[i] for i in range(_N)])
-            _accumulate_frame_hpcp(sp1, float(sr), hpcp)
-            _accumulate_frame_hpcp(sp2, float(sr), hpcp)
+            _accumulate_frame_hpcp(sp1, float(sr), dst1)
+            _accumulate_frame_hpcp(sp2, float(sr), hp1 if (idx + 1) < mid else hp2)
         else:
             sp1, _ = _fft_pair_mag(f1, [0.0] * _N)
-            _accumulate_frame_hpcp(sp1, float(sr), hpcp)
+            _accumulate_frame_hpcp(sp1, float(sr), dst1)
+    full = _correlate_bgate(_gate_pcp([hp1[i] + hp2[i] for i in range(12)]))
+    k1 = _correlate_bgate(_gate_pcp(hp1))[0]["key"] if max(hp1) > 0 else full[0]["key"]
+    k2 = _correlate_bgate(_gate_pcp(hp2))[0]["key"] if max(hp2) > 0 else full[0]["key"]
+    return full, k1, k2
+
+
+def _gate_pcp(hpcp: list[float]) -> list[float]:
     mx = max(hpcp, default=1.0) or 1.0
-    pcp = [v / mx if (v / mx) >= 0.2 else 0.0 for v in hpcp]
-    return _correlate_bgate(pcp)
+    return [v / mx if (v / mx) >= 0.2 else 0.0 for v in hpcp]
 
 
 def _fft_pair_mag(x1: list[float], x2: list[float]) -> tuple[list[float], list[float]]:
     buf = [complex(x1[idx], x2[idx]) for idx in _REV]
     for stage, tw in enumerate(_TWIDDLES):
-        half = 1 << stage
-        step = half << 1
+        half, step = 1 << stage, 2 << stage
         for base in range(0, _N, step):
             for k in range(half):
-                t = tw[k] * buf[base + k + half]
-                u = buf[base + k]
-                buf[base + k + half] = u - t
-                buf[base + k] = u + t
-    m1 = [0.0] * 1425
-    m2 = [0.0] * 1425
+                t, u = tw[k] * buf[base + k + half], buf[base + k]
+                buf[base + k + half], buf[base + k] = u - t, u + t
+    m1, m2 = [0.0] * 1425, [0.0] * 1425
     m1[0], m2[0] = abs(buf[0].real), abs(buf[0].imag)
     for k in range(1, 1425):
         zk, z_nk = buf[k], buf[_N - k].conjugate()
-        m1[k] = 0.5 * abs(zk + z_nk)
-        m2[k] = 0.5 * abs(zk - z_nk)
+        m1[k], m2[k] = 0.5 * abs(zk + z_nk), 0.5 * abs(zk - z_nk)
     return m1, m2
 
 
 def _accumulate_frame_hpcp(spec: list[float], sr: float, hpcp: list[float]) -> None:
-    lo_b = max(1, int(math.ceil(25.0 * _N / sr)))
-    hi_b = min(len(spec) - 2, int(math.floor(3500.0 * _N / sr)))
+    lo_b, hi_b = max(1, int(math.ceil(25.0 * _N / sr))), min(len(spec) - 2, int(math.floor(3500.0 * _N / sr)))
     peaks: list[tuple[float, float]] = []
     for b in range(lo_b, hi_b + 1):
         sb = spec[b]
         if sb > 1e-4 and sb > spec[b - 1] and sb > spec[b + 1]:
-            a = 20.0 * math.log10(max(1e-20, spec[b - 1]))
-            bt = 20.0 * math.log10(max(1e-20, sb))
-            g = 20.0 * math.log10(max(1e-20, spec[b + 1]))
+            a, bt, g = 20.0 * math.log10(max(1e-20, spec[b - 1])), 20.0 * math.log10(max(1e-20, sb)), 20.0 * math.log10(max(1e-20, spec[b + 1]))
             den = a - 2.0 * bt + g
             p = 0.5 * (a - g) / den if abs(den) > 1e-12 else 0.0
             pf = (b + p) * (sr / _N)

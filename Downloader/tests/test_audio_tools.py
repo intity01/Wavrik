@@ -84,6 +84,8 @@ def test_analyze_audio_file_estimates_key_and_bpm(tmp_path: Path):
     assert result["status"] == "estimate"
     assert "Experimental / Estimate" in result["badge"]
     assert 50 <= int(result["confidence"]) <= 99
+    assert result["first_half_key"] in {"C major", "A minor", "G major", "F major", "E minor"}
+    assert "section_summary" in result
     assert result["key"] in {"C major", "A minor", "G major", "F major", "E minor"}
     assert 110.0 <= float(result["bpm"]) <= 130.0
     assert len(result["key_candidates"]) == 3
@@ -92,6 +94,8 @@ def test_analyze_audio_file_estimates_key_and_bpm(tmp_path: Path):
 def test_build_export_filename_and_unique_export_path(tmp_path: Path):
     name = build_export_filename("C:/music/vocal_track.mp3", -2, "D# minor", "wav")
     assert name == "vocal_track_[Key_D#m_-2st].wav"
+    stretched = build_export_filename("C:/music/vocal_track.mp3", -2, "D# minor", "wav", 132.0)
+    assert stretched == "vocal_track_[Key_D#m_132BPM_-2st].wav"
 
     first = unique_export_path(tmp_path, name)
     assert first == tmp_path / name
@@ -111,11 +115,14 @@ def test_render_pitch_shift_safety_guards_and_real_render(tmp_path: Path):
     with pytest.raises(ValueError, match="-12 to \\+12"):
         render_pitch_shift(source, tmp_path / "bad.wav", -15)
 
-    out_r3 = render_pitch_shift(source, tmp_path / "out_r3.wav", -2, engine="r3_finer", fmt="wav")
+    with pytest.raises(ValueError, match="0.5x to 2.0x"):
+        render_pitch_shift(source, tmp_path / "bad_tempo.wav", 0, tempo_ratio=3.0)
+
+    out_r3 = render_pitch_shift(source, tmp_path / "out_r3.wav", -2, engine="r3_finer", fmt="wav", tempo_ratio=1.1)
     assert out_r3.is_file() and out_r3.stat().st_size > 1000
     assert source.read_bytes() == orig_bytes
 
-    out_ff = render_pitch_shift(source, tmp_path / "out_ff.wav", 2, engine="ffmpeg_formant", fmt="wav")
+    out_ff = render_pitch_shift(source, tmp_path / "out_ff.wav", 2, engine="ffmpeg_formant", fmt="wav", tempo_ratio=0.9)
     assert out_ff.is_file() and out_ff.stat().st_size > 1000
 
 
@@ -135,13 +142,26 @@ def test_library_to_audio_tools_navigation_and_controls(
     with patch("src.ui.pages.library_page.get_open_file_path", return_value=wav_path):
         window.pageLibrary._add_local()
 
+    window.pageLibrary.storeAnalysisResult({
+        "filePath": str(wav_path),
+        "key": "F# minor",
+        "camelot": "11A",
+        "bpm": 88.0,
+        "confidence": 90,
+        "section_summary": "Stable: F# minor (11A) throughout",
+        "key_candidates": [{"key": "F# minor", "correlation": 0.85}, {"key": "A major", "correlation": 0.72}],
+    })
     card = window.pageLibrary.listLay.itemAt(0).widget()
+    assert "F# minor (11A)" in card.metadata.text()
     card._open_audio_tools()
 
     assert window.stackedWidget.currentWidget() is window.pageAudioTools
     assert window.pageAudioTools._source == wav_path
 
     tools = window.pageAudioTools
+    assert tools.detectedKeyCombo.currentText() == "F# minor"
+    tools.candButtons[1].click()
+    assert tools.detectedKeyCombo.currentText() == "A major"
     tools.detectedKeyCombo.setCurrentText("F minor")
     tools.semitoneSpin.setValue(-2)
     assert "D# minor (2A)" in tools.resultingKeyLabel.text()
@@ -152,3 +172,6 @@ def test_library_to_audio_tools_navigation_and_controls(
     assert tools.bpmSpin.value() == 70.0
     tools.doubleBpmBtn.click()
     assert tools.bpmSpin.value() == 140.0
+    tools.targetBpmSpin.setValue(154.0)
+    assert "1.10x" in tools.tempoRatioLabel.text()
+    assert "154BPM" in tools.outputPreviewLabel.text()
