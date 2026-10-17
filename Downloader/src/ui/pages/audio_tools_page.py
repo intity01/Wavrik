@@ -1,4 +1,4 @@
-"""Audio Tools page for Key/BPM estimation, Rubber Band R3 pitch/tempo shift, and export."""
+"""Audio Tools page for Key/BPM estimation, Waveform, Camelot mix, Rubber Band R3, and export."""
 
 from __future__ import annotations
 
@@ -8,11 +8,15 @@ import tempfile
 from PyQt6.QtCore import QThreadPool, pyqtSignal
 from PyQt6.QtWidgets import QWidget
 
-from src.services.audio_analysis import camelot_code, enharmonic_key, mirex_key_score, transpose_key
+from src.services.audio_analysis import camelot_code, enharmonic_key, transpose_key
+from src.services.audio_camelot import get_harmonic_neighbors
 from src.services.audio_pitch import build_export_filename, unique_export_path
 from src.services.platform_actions import open_parent, open_path
-from src.ui.dialogs import get_open_file_path
+from src.ui.components.batch_audio_dialog import BatchAudioDialog
+from src.ui.dialogs import get_open_file_path, get_open_files
 from src.ui.workers.audio_worker import AnalyzeAudioWorker, AudioToolSignals, PitchJob, RenderPitchWorker
+
+from .audio_tools_presenter import format_analysis_status, populate_candidate_buttons, populate_harmonic_buttons
 from .audio_tools_view import build_ui
 
 _AUDIO_FILTER = "Audio files (*.wav *.mp3 *.flac *.m4a *.aac *.ogg *.opus);;All files (*.*)"
@@ -25,18 +29,16 @@ class AudioToolsInterface(QWidget):
     def __init__(self, config, historyManager=None, parent=None):
         super().__init__(parent)
         self._cfg, self._hist, self._source, self._lastExport = config, historyManager, None, None
-        self._candidates, self._busy, self._pool = [], False, QThreadPool(self)
+        self._candidates, self._harmonic_cands, self._busy, self._pool = [], [], False, QThreadPool(self)
         self._pool.setMaxThreadCount(1)
         build_ui(self)
         self._set_controls_enabled(False)
 
     def loadFile(self, path: str | Path, cached: dict | None = None) -> None:
-        candidate = Path(path)
-        if not candidate.is_file():
-            self.statusLabel.setText("Selected audio file does not exist.")
-            return
-        self._source = candidate
-        self.fileLabel.setText(f"{candidate.name} ({candidate.parent})")
+        if not (cand := Path(path)).is_file():
+            return self.statusLabel.setText("Selected audio file does not exist.")
+        self._source, self._busy = cand, False
+        self.fileLabel.setText(f"{cand.name} ({cand.parent})")
         self._set_controls_enabled(True)
         self._update_preview_labels()
         self._on_analyzed(cached) if (cached and cached.get("key")) else self._reanalyze()
@@ -45,36 +47,41 @@ class AudioToolsInterface(QWidget):
         if (sel := get_open_file_path(self, "Choose audio file", _AUDIO_FILTER, self._cfg.get("downloadPath", ""))):
             self.loadFile(sel)
 
+    def _open_batch_dialog(self) -> None:
+        if (files := get_open_files(self, "Choose audio files for batch processing", _AUDIO_FILTER, self._cfg.get("downloadPath", ""))):
+            BatchAudioDialog(files, self._cfg, self).exec()
+
     def _reanalyze(self) -> None:
         if self._source and not self._busy:
             self._busy, self._signals = True, AudioToolSignals()
-            self.statusLabel.setText("Analyzing Key, Section Modulation & BPM…")
+            self.statusLabel.setText("Analyzing Key, Waveform & BPM…")
             self._signals.analyzed.connect(self._on_analyzed)
             self._signals.error.connect(self._on_error)
             self._pool.start(AnalyzeAudioWorker(self._source, self._signals))
 
     def _on_analyzed(self, result: dict) -> None:
         self._busy, key, bpm = False, str(result.get("key") or "C major"), float(result.get("bpm") or 120.0)
-        self._candidates = list(result.get("key_candidates") or [])
+        self._candidates, self._harmonic_cands = list(result.get("key_candidates") or []), get_harmonic_neighbors(key)
         self.detectedKeyCombo.setCurrentText(key)
-        self.bpmSpin.blockSignals(True)
-        self.bpmSpin.setValue(bpm)
-        self.bpmSpin.blockSignals(False)
+        self.bpmSpin.blockSignals(True) or self.bpmSpin.setValue(bpm) or self.bpmSpin.blockSignals(False)
         self.targetBpmSpin.setValue(bpm)
         self.badgeLabel.setText(str(result.get("badge") or "Experimental / Estimate"))
         self.sectionKeyLabel.setText(f"Section Key: {result.get('section_summary', '--')}")
-        _populate_candidate_buttons(self.candButtons, self._candidates, key)
+        self.waveformWidget.setPeaks(result.get("peaks", []), result.get("duration_sec", 0.0), result.get("section_summary", ""))
+        populate_candidate_buttons(self.candButtons, self._candidates, key)
+        populate_harmonic_buttons(self.camelotButtons, self._harmonic_cands)
         self._update_preview_labels()
-        self.statusLabel.setText(_format_analysis_status(key, bpm, result))
+        self.statusLabel.setText(format_analysis_status(key, bpm, result))
         self.analysisCompleted.emit(result)
 
-    def _select_candidate(self, index: int) -> None:
-        if 0 <= index < len(self._candidates):
-            self.detectedKeyCombo.setCurrentText(str(self._candidates[index]["key"]))
+    def _select_candidate(self, i: int) -> None:
+        0 <= i < len(self._candidates) and self.detectedKeyCombo.setCurrentText(str(self._candidates[i]["key"]))
+
+    def _select_harmonic_neighbor(self, i: int) -> None:
+        0 <= i < len(self._harmonic_cands) and self.semitoneSpin.setValue(self._harmonic_cands[i]["semitones"])
 
     def _on_source_bpm_changed(self, value: float) -> None:
-        self.targetBpmSpin.setValue(value)
-        self._update_preview_labels()
+        self.targetBpmSpin.setValue(value) or self._update_preview_labels()
 
     def _update_preview_labels(self, *_args) -> None:
         base_key, semitones = self.detectedKeyCombo.currentText() or "C major", self.semitoneSpin.value()
@@ -90,21 +97,19 @@ class AudioToolsInterface(QWidget):
 
     def _preview_shifted(self) -> None:
         if self._source and not self._busy:
-            preview_dir = Path(tempfile.gettempdir()) / "WavrikPreview"
-            preview_dir.mkdir(parents=True, exist_ok=True)
-            self._start_render(unique_export_path(preview_dir, self._export_name("wav")), "wav", True)
+            d = Path(tempfile.gettempdir()) / "WavrikPreview"
+            d.mkdir(parents=True, exist_ok=True)
+            self._start_render(unique_export_path(d, self._export_name("wav")), "wav", True)
 
     def _export_shifted(self) -> None:
         if self._source and not self._busy:
-            fmt = str(self.formatCombo.currentData() or "wav")
-            self._start_render(unique_export_path(self._cfg.getDownloadPath("audio"), self._export_name(fmt)), fmt, False)
+            self._start_render(unique_export_path(self._cfg.getDownloadPath("audio"), self._export_name(fmt := str(self.formatCombo.currentData() or "wav"))), fmt, False)
 
     def _start_render(self, target: Path, fmt: str, is_preview: bool) -> None:
         self._busy, self._signals = True, AudioToolSignals()
         self.statusLabel.setText("Rendering audio with Rubber Band…")
         self.exportBtn.setEnabled(False)
-        self._signals.rendered.connect(self._on_rendered)
-        self._signals.error.connect(self._on_error)
+        self._signals.rendered.connect(self._on_rendered) or self._signals.error.connect(self._on_error)
         self._pool.start(RenderPitchWorker(PitchJob(self._source, target, self.semitoneSpin.value(), str(self.engineCombo.currentData() or "r3_finer"), fmt, is_preview, self._tempo_ratio()), self._signals))
 
     def _on_rendered(self, path_str: str, is_preview: bool) -> None:
@@ -122,26 +127,18 @@ class AudioToolsInterface(QWidget):
 
     def _on_error(self, message: str) -> None:
         self._busy = False
-        self.exportBtn.setEnabled(bool(self._source))
-        self.statusLabel.setText(message)
+        self.exportBtn.setEnabled(bool(self._source)) or self.statusLabel.setText(message)
 
     def _open_export_folder(self) -> None:
         open_parent(self._lastExport) if (self._lastExport and self._lastExport.exists()) else None
 
     def _export_name(self, fmt: str) -> str:
-        tbpm = self.targetBpmSpin.value() if abs(self._tempo_ratio() - 1.0) >= 0.005 else 0.0
-        return build_export_filename(self._source, self.semitoneSpin.value(), transpose_key(self.detectedKeyCombo.currentText() or "C major", self.semitoneSpin.value()), fmt, tbpm)
+        tb = self.targetBpmSpin.value() if abs(self._tempo_ratio() - 1.0) >= 0.005 else 0.0
+        return build_export_filename(self._source, self.semitoneSpin.value(), transpose_key(self.detectedKeyCombo.currentText() or "C major", self.semitoneSpin.value()), fmt, tb)
 
     def _tempo_ratio(self) -> float:
         return max(0.5, min(2.0, self.targetBpmSpin.value() / max(30.0, self.bpmSpin.value())))
 
     def _set_controls_enabled(self, enabled: bool) -> None:
-        for w in (self.reanalyzeBtn, self.previewOrigBtn, self.previewShiftedBtn, self.exportBtn, *self.candButtons):
+        for w in (self.reanalyzeBtn, self.previewOrigBtn, self.previewShiftedBtn, self.exportBtn, *self.candButtons, *self.camelotButtons):
             w.setEnabled(enabled)
-def _populate_candidate_buttons(buttons: list, candidates: list[dict], top_key: str) -> None:
-    for idx, btn in enumerate(buttons):
-        ck = str(candidates[idx]["key"]) if idx < len(candidates) else ""
-        btn.setText(f"#{idx + 1} {ck} ({camelot_code(ck)} · {mirex_key_score(ck, top_key)[1] if idx > 0 else 'Top'})" if ck else f"#{idx + 1} --")
-def _format_analysis_status(key: str, bpm: float, result: dict) -> str:
-    enh, conf = enharmonic_key(key), result.get("confidence", "")
-    return f"Estimated {f'{key} / {enh}' if enh != key else key} ({camelot_code(key)}){f' [{conf}%]' if conf else ''} · {bpm:.1f} BPM"

@@ -9,7 +9,7 @@ import sys
 import wave
 
 from src.core.runtime import find_ffmpeg
-from src.services.audio_dsp import estimate_bpm as _estimate_bpm
+from src.services.audio_dsp import downsample_peaks as _downsample_peaks, estimate_bpm as _estimate_bpm
 from src.services.audio_hpcp import extract_key_and_sections as _extract_key_and_sections
 
 NOTES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
@@ -112,6 +112,8 @@ def analyze_audio_file(path: str | Path, max_seconds: int = 250) -> dict:
         "status": "estimate",
         "badge": f"Experimental / Estimate · ความเชื่อมั่น {conf}% (2nd: {sec_key} · {rel})",
         "key_candidates": candidates[:3],
+        "peaks": _downsample_peaks(samples, 80),
+        "duration_sec": round(len(samples) / float(sr), 1),
     }
 
 

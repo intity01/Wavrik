@@ -175,3 +175,58 @@ def test_library_to_audio_tools_navigation_and_controls(
     tools.targetBpmSpin.setValue(154.0)
     assert "1.10x" in tools.tempoRatioLabel.text()
     assert "154BPM" in tools.outputPreviewLabel.text()
+
+    # Camelot harmonic mix button check
+    assert len(tools.camelotButtons) == 4
+    # F# minor harmonic neighbors: 11A Match (0st), 11B Rel (+3st)
+    assert "11A" in tools.camelotButtons[0].text()
+    assert "11B" in tools.camelotButtons[1].text()
+    tools.camelotButtons[1].click()
+    assert tools.semitoneSpin.value() == 3
+    assert hasattr(tools, "waveformWidget")
+
+
+def test_camelot_wheel_harmonic_neighbors():
+    from src.services.audio_camelot import get_harmonic_neighbors, key_from_camelot, semitone_distance
+
+    assert key_from_camelot("11A") == "F# minor"
+    assert key_from_camelot("8B") == "C major"
+    assert semitone_distance("F# minor", "A major") == 3
+    neighbors = get_harmonic_neighbors("F# minor")
+    assert len(neighbors) == 4
+    codes = [n["code"] for n in neighbors]
+    assert codes == ["11A", "11B", "12A", "10A"]
+    assert neighbors[0]["semitones"] == 0
+    assert neighbors[1]["semitones"] == 3
+
+
+def test_waveform_widget_rendering(qtbot):
+    from src.ui.components.waveform_widget import WaveformWidget
+
+    widget = WaveformWidget()
+    qtbot.addWidget(widget)
+    widget.show()
+    widget.setPeaks([0.1, 0.4, 0.8, 0.9, 0.3], duration_sec=120.0, section_text="1st Half C | 2nd Half G")
+    assert len(widget._peaks) == 5
+    widget.clear()
+    assert len(widget._peaks) == 0
+
+
+def test_batch_audio_processing_service_and_worker(tmp_path: Path):
+    from src.services.audio_batch import BatchJobConfig, process_batch_file
+    from src.ui.workers.batch_worker import BatchAudioSignals, BatchAudioWorker
+
+    wav1 = _write_test_wav(tmp_path / "track1.wav", seconds=1.0)
+    wav2 = _write_test_wav(tmp_path / "track2.wav", seconds=1.0)
+    out_dir = tmp_path / "batch_out"
+
+    cfg = BatchJobConfig(semitones=-2, tempo_ratio=1.0, engine="r3_finer", fmt="wav", output_dir=out_dir)
+    res = process_batch_file(wav1, cfg, known_key="C major")
+    assert res.is_file() and res.stat().st_size > 1000
+
+    processed = []
+    signals = BatchAudioSignals()
+    signals.itemProcessed.connect(lambda cur, tot, name: processed.append(name))
+    worker = BatchAudioWorker([wav1, wav2], cfg, signals, {str(wav1): "C major", str(wav2): "A minor"})
+    worker.run()
+    assert len(processed) == 2

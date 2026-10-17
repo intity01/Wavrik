@@ -1,4 +1,4 @@
-"""UI layout builder for the Audio Tools page."""
+"""UI layout builder for the Audio Tools page with Waveform and Camelot advisor."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import QDoubleSpinBox, QFrame, QHBoxLayout, QLabel, QSpinBo
 
 from src.services.audio_analysis import ALL_KEYS
 from src.ui.components.controls import ComboBox, PrimaryPushButton, PushButton, SmoothScrollArea, ToolButton
+from src.ui.components.waveform_widget import WaveformWidget
 
 
 def build_ui(page) -> None:
@@ -25,21 +26,22 @@ def build_ui(page) -> None:
 
 def _source_card(page) -> QFrame:
     card, layout = _card("STEP 1 · SOURCE", "1. ไฟล์เสียงต้นฉบับ (Source Audio)", "เลือกไฟล์เสียงในเครื่อง (.wav, .mp3, .flac, .m4a) หรือส่งต่อจาก Library (ไฟล์เดิมปลอดภัย)")
-    row = QHBoxLayout()
-    page.fileLabel = QLabel("No audio file loaded. Choose a local file or send one from Library.", objectName="MutedText")
+    row, page.fileLabel = QHBoxLayout(), QLabel("No audio file loaded. Choose a local file or send one from Library.", objectName="MutedText")
     page.fileLabel.setWordWrap(True)
-    page.chooseFileBtn = PushButton("Choose audio file")
+    page.chooseFileBtn, page.batchBtn = PushButton("Choose audio file"), ToolButton("Batch Process...")
     page.chooseFileBtn.clicked.connect(page._choose_file)
+    page.batchBtn.clicked.connect(page._open_batch_dialog)
     row.addWidget(page.fileLabel, 1)
-    row.addWidget(page.chooseFileBtn)
+    for btn in (page.chooseFileBtn, page.batchBtn):
+        row.addWidget(btn)
     layout.addLayout(row)
     return card
 
 
 def _analysis_card(page) -> QFrame:
     card, layout = _card("STEP 2 · HARMONIC ANALYSIS", "2. วิเคราะห์คีย์เพลง รหัส Camelot และจังหวะ (Key & BPM)", "วิเคราะห์ด้วย HPCP + MIREX: แสดงคีย์หลัก, Camelot Code (จับคู่คีย์เพลง), คีย์ทางเลือก 3 อันดับ และตรวจจับการเปลี่ยนคีย์")
-    page.badgeLabel, page.sectionKeyLabel = QLabel("Experimental / Estimate · ทดลอง / ค่าประมาณ", objectName="ExperimentalBadge"), QLabel("Section Key: -- (1st Half vs 2nd Half)", objectName="MutedText")
-    for w in (page.badgeLabel, page.sectionKeyLabel):
+    page.badgeLabel, page.sectionKeyLabel, page.waveformWidget = QLabel("Experimental / Estimate · ทดลอง / ค่าประมาณ", objectName="ExperimentalBadge"), QLabel("Section Key: -- (1st Half vs 2nd Half)", objectName="MutedText"), WaveformWidget()
+    for w in (page.badgeLabel, page.sectionKeyLabel, page.waveformWidget):
         layout.addWidget(w)
     key_row = QHBoxLayout()
     page.detectedKeyCombo, page.camelotLabel, page.reanalyzeBtn = ComboBox(), QLabel("Camelot: 8B", objectName="StepBadge"), ToolButton("Re-analyze")
@@ -50,20 +52,21 @@ def _analysis_card(page) -> QFrame:
         key_row.addWidget(w)
     key_row.addStretch(1)
     key_row.addWidget(page.reanalyzeBtn)
-    for row in (key_row, _candidates_row(page), _bpm_row(page)):
+    c_row, page.candButtons = _buttons_row("Top-3 Candidates:", 3, page._select_candidate)
+    h_row, page.camelotButtons = _buttons_row("Harmonic Mix (Camelot):", 4, page._select_harmonic_neighbor)
+    for row in (key_row, c_row, h_row, _bpm_row(page)):
         layout.addLayout(row)
     return card
 
 
-def _candidates_row(page) -> QHBoxLayout:
-    row = QHBoxLayout()
-    row.addWidget(QLabel("Top-3 Candidates:", objectName="MutedText"))
-    page.candButtons = [ToolButton(f"#{i} --") for i in (1, 2, 3)]
-    for idx, btn in enumerate(page.candButtons):
-        btn.clicked.connect(lambda _c=False, i=idx: page._select_candidate(i))
+def _buttons_row(label: str, count: int, on_click) -> tuple[QHBoxLayout, list[ToolButton]]:
+    row, btns = QHBoxLayout(), [ToolButton(f"#{i + 1} --") for i in range(count)]
+    row.addWidget(QLabel(label, objectName="MutedText"))
+    for idx, btn in enumerate(btns):
+        btn.clicked.connect(lambda _c=False, i=idx: on_click(i))
         row.addWidget(btn)
     row.addStretch(1)
-    return row
+    return row, btns
 
 
 def _bpm_row(page) -> QHBoxLayout:
@@ -139,11 +142,9 @@ def _export_card(page) -> QFrame:
 def _card(pill: str, title: str, desc: str) -> tuple[QFrame, QVBoxLayout]:
     card, layout = QFrame(objectName="AudioToolsCard"), QVBoxLayout()
     card.setLayout(layout)
-    layout.setContentsMargins(16, 14, 16, 14)
-    layout.setSpacing(8)
+    layout.setContentsMargins(16, 14, 16, 14) or layout.setSpacing(8)
     top = QHBoxLayout()
     top.addWidget(QLabel(pill, objectName="CategoryPill"))
     top.addWidget(QLabel(title, objectName="SectionTitle"), 1)
-    layout.addLayout(top)
-    layout.addWidget(QLabel(desc, objectName="SectionDesc"))
+    layout.addLayout(top) or layout.addWidget(QLabel(desc, objectName="SectionDesc"))
     return card, layout

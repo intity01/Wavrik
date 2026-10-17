@@ -124,3 +124,10 @@ def _interp(acf: list[float], lag_f: float, max_lag: int) -> float:
         return 0.0
     frac = lag_f - idx
     return acf[idx] * (1.0 - frac) + acf[idx + 1] * frac
+
+
+def downsample_peaks(samples: list[float], count: int = 80) -> list[float]:
+    if not samples:
+        return []
+    step = max(1, len(samples) // count)
+    return [round(max((abs(s) for s in samples[i : i + step]), default=0.0), 3) for i in range(0, len(samples), step)][:count]

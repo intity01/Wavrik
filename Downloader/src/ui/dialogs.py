@@ -35,6 +35,14 @@ def get_open_file_path(
     return Path(selected) if selected else None
 
 
+def get_open_files(
+    parent=None, caption: str = "Open Files",
+    filters: str = "All Files (*.*)", start_dir: str | Path = "",
+) -> list[Path]:
+    selected, _ = QFileDialog.getOpenFileNames(parent, caption, _start_path(start_dir) or str(Path.home()), filters)
+    return [Path(p) for p in selected] if selected else []
+
+
 def _native_directory(parent, caption: str, start_dir: str | Path) -> Path | None:
     dialog = QFileDialog(parent, caption)
     dialog.setFileMode(QFileDialog.FileMode.Directory)
