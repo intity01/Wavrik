@@ -15,6 +15,7 @@ class NavigationItemPosition:
 
 class FluentIcon:
     HOME = "home"
+    AUDIO = "audio"
     HISTORY = "history"
     SETTING = "settings"
 

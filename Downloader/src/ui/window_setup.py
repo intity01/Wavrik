@@ -22,6 +22,21 @@ class WindowDependencies:
     history: object
 
 
+def resolve_dependencies(
+    first: Any, args: tuple[Any, ...], kwargs: dict[str, Any],
+) -> WindowDependencies:
+    if isinstance(first, WindowDependencies):
+        return first
+    k = kwargs.get
+    config = first if first is not None else k("config", k("settings"))
+    logger = args[0] if len(args) > 0 else k("logger")
+    downloader = args[1] if len(args) > 1 else k("downloader", k("downloads", k("engine")))
+    updater = args[2] if len(args) > 2 else k("updater")
+    tray = args[3] if len(args) > 3 else k("tray", k("trayIcon"))
+    history = args[4] if len(args) > 4 else k("history", k("historyManager"))
+    return WindowDependencies(config, logger, downloader, updater, tray, history)
+
+
 def initialize(window, dependencies: WindowDependencies) -> None:
     window._cfg = dependencies.config
     window._log = dependencies.logger
@@ -31,7 +46,7 @@ def initialize(window, dependencies: WindowDependencies) -> None:
     window._hist = dependencies.history
     window._lastClip = ""
     window._fullscreen_action = None
-    window.setWindowTitle("Media Downloader PRO")
+    window.setWindowTitle("Wavrik")
     window.setMinimumSize(760, 600)
     window.resize(1120, 760)
     _configure_platform(window)
@@ -46,14 +61,8 @@ def initialize(window, dependencies: WindowDependencies) -> None:
 
 
 def _sync_first_run_appearance(window: Any) -> None:
-    if sys.platform == "darwin" and getattr(window, "_cfg", None) and window._cfg.get("firstRun", True):
-        try:
-            from .macos.appearance import is_system_dark_mode
-
-            theme = "dark" if is_system_dark_mode() else "light"
-            window._cfg.set("theme", theme)
-        except Exception:
-            pass
+    if getattr(window, "_cfg", None):
+        window._cfg.set("theme", "dark")
 
 
 def _configure_platform(window) -> None:
@@ -66,7 +75,7 @@ def _configure_platform(window) -> None:
     )
     window.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
     from src.ui.macos import setup_macos_menu_bar
-    _, window._fullscreen_action = setup_macos_menu_bar(window, "Media Downloader PRO")
+    _, window._fullscreen_action = setup_macos_menu_bar(window, "Wavrik")
 
 
 def _set_icon(window) -> None:

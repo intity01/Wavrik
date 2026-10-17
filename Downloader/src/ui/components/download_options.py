@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import sys
-
 from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtWidgets import QFileDialog, QFrame
+from PyQt6.QtWidgets import QFrame
 
 from src.domain.presets import PRESETS, getPreset
+from src.ui.dialogs import get_save_directory
 
 from .download_options_view import build, short_label
-
-if sys.platform == "darwin":
-    from src.ui.macos.dialogs import get_save_directory
 
 
 class DownloadOptions(QFrame):
@@ -67,12 +63,8 @@ class DownloadOptions(QFrame):
         self.engineChanged.emit(engine)
 
     def _browse(self) -> None:
-        if sys.platform == "darwin":
-            selected = get_save_directory(self, "Choose download folder", self.pathInput.text())
-            path = str(selected).strip() if selected else ""
-        else:
-            selected = QFileDialog.getExistingDirectory(self, "Choose download folder", self.pathInput.text())
-            path = selected.strip() if selected else ""
+        selected = get_save_directory(self, "Choose download folder", self.pathInput.text())
+        path = str(selected).strip() if selected else ""
         if not path or path == ".":
             return
         self.pathInput.setText(path)

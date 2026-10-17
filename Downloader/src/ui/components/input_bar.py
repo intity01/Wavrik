@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import sys
-
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
     QApplication,
-    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -15,11 +12,9 @@ from PyQt6.QtWidgets import (
 )
 
 from src.core.parser import normalizeUrl, parseImportFile
+from src.ui.dialogs import get_open_file_path
 
 from .controls import LineEdit, PrimaryPushButton, ToolButton
-
-if sys.platform == "darwin":
-    from src.ui.macos.dialogs import get_open_file_path
 
 
 class InputBar(QFrame):
@@ -85,12 +80,8 @@ class InputBar(QFrame):
         self.urlInput.clear()
 
     def _import(self) -> None:
-        if sys.platform == "darwin":
-            selected = get_open_file_path(self, "Import URL list", "Text files (*.txt)")
-            path = str(selected).strip() if selected else ""
-        else:
-            selected, _ = QFileDialog.getOpenFileName(self, "Import URL list", "", "Text files (*.txt)")
-            path = selected.strip() if selected else ""
+        selected = get_open_file_path(self, "Import URL list", "Text files (*.txt)")
+        path = str(selected).strip() if selected else ""
         if not path or path == ".":
             return
         urls = parseImportFile(path)

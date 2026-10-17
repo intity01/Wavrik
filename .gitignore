@@ -60,3 +60,9 @@ desktop.ini
 .idea/
 *.sublime-project
 *.sublime-workspace
+
+# Local research, spikes, and sketches (kept on disk, excluded from app repo)
+.hermes/
+sketches/
+spikes/
+

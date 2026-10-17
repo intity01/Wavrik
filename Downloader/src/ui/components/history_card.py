@@ -1,101 +1,10 @@
-"""History row with actionable file state."""
+"""Compatibility re-export for LibraryCard."""
 
 from __future__ import annotations
 
-from pathlib import Path
+from .library_card import LibraryCard
 
-from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+HistoryCard = LibraryCard
 
-from src.services.platform_actions import open_parent, open_path
+__all__ = ["HistoryCard", "LibraryCard"]
 
-from .controls import ToolButton
-
-
-class HistoryCard(QWidget):
-    redownloadRequested = pyqtSignal(str)
-
-    def __init__(self, entry: dict, parent=None):
-        super().__init__(parent)
-        self._entry = entry
-        outer = QHBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        card = QFrame()
-        card.setObjectName("HistoryCard")
-        outer.addWidget(card)
-        content = QVBoxLayout(card)
-        content.setContentsMargins(14, 12, 14, 12)
-        labels = QVBoxLayout()
-        title = QLabel(entry.get("title", "Untitled"))
-        title.setObjectName("SectionTitle")
-        title.setWordWrap(True)
-        metadata = QLabel(self._metadata_text())
-        metadata.setObjectName("MutedText")
-        self.status = QLabel(self._status_text())
-        self.status.setProperty("status", entry.get("status", "failed"))
-        labels.addWidget(title)
-        labels.addWidget(metadata)
-        labels.addWidget(self.status)
-        content.addLayout(labels)
-        self._add_actions(content)
-
-    def _add_actions(self, content: QVBoxLayout) -> None:
-        actions = QHBoxLayout()
-        actions.addStretch(1)
-        if self._entry.get("status") == "completed" and self._entry.get("filePath"):
-            self._add_file_actions(actions)
-        elif bool(self._entry.get("url", "")):
-            self._add_retry_action(actions)
-        content.addLayout(actions)
-
-    def _add_file_actions(self, actions: QHBoxLayout) -> None:
-        open_file = ToolButton("Open file")
-        open_folder = ToolButton("Open folder")
-        open_file.setAccessibleDescription("Open the downloaded media file")
-        open_folder.setAccessibleDescription("Open the folder that contains the downloaded file")
-        open_file.clicked.connect(self._open_file)
-        open_folder.clicked.connect(self._open_folder)
-        actions.addWidget(open_file)
-        actions.addWidget(open_folder)
-
-    def _add_retry_action(self, actions: QHBoxLayout) -> None:
-        retry = ToolButton("Download again")
-        retry.setAccessibleDescription("Add this URL back to the download queue")
-        retry.clicked.connect(lambda: self.redownloadRequested.emit(self._entry.get("url", "")))
-        actions.addWidget(retry)
-
-    def _metadata_text(self) -> str:
-        timestamp = self._entry.get("timestamp", "").replace("T", " ")[:16]
-        media_type = self._entry.get("mediaType", "unknown").title()
-        size = _format_size(int(self._entry.get("fileSize", 0) or 0))
-        return f"{timestamp} · {media_type} · {size}"
-
-    def _status_text(self) -> str:
-        status = self._entry.get("status", "failed").title()
-        error = self._entry.get("error", "")
-        return f"{status}: {error}" if error else status
-
-    def _open_file(self) -> None:
-        path = Path(self._entry.get("filePath", ""))
-        if not path.is_file():
-            self.status.setText("File is no longer available at the saved location")
-            return
-        open_path(path)
-
-    def _open_folder(self) -> None:
-        path = Path(self._entry.get("filePath", ""))
-        if not path.exists():
-            self.status.setText("File is no longer available at the saved location")
-            return
-        open_parent(path)
-
-
-def _format_size(size: int) -> str:
-    if size <= 0:
-        return "Size unavailable"
-    value = float(size)
-    for unit in ("B", "KB", "MB", "GB"):
-        if value < 1024 or unit == "GB":
-            return f"{value:.1f} {unit}"
-        value /= 1024
-    return "Size unavailable"

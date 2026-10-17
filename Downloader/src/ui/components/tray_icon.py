@@ -34,7 +34,7 @@ def run_applescript(script: str, timeout: float = 3.0) -> None:
 class SystemTrayIcon:
     """System tray icon and notification manager."""
 
-    def __init__(self, appName: str = "Media Downloader PRO"):
+    def __init__(self, appName: str = "Wavrik"):
         self.appName = appName
         self._tray: QSystemTrayIcon | None = None
         self._onShow: Callable | None = None

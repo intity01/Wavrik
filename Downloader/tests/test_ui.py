@@ -228,3 +228,46 @@ def test_completed_card_handles_missing_file(qtbot, config, logger, fake_downloa
     card._handle_action()
     assert card._state == "failed"
     assert "no longer exists" in card._lblStatus.text().lower() or "moved" in card._lblStatus.text().lower()
+
+
+def test_phase1_dark_teal_palette_and_language_settings(qtbot, config, logger, fake_downloader, history):
+    from src.ui.theme.tokens import ACCENT, DARK, palette
+
+    assert ACCENT == "#2BC3B0"
+    assert DARK["bg"] == "#0F1113"
+    assert palette("light") == DARK
+    assert config.get("theme") == "dark"
+    assert config.get("accentColor") == "#2BC3B0"
+    assert config.get("checkUpdatesOnStartup") is False
+
+    window = _window(qtbot, config, logger, fake_downloader, history)
+    assert not hasattr(window.pageSettings, "themeCombo")
+    assert not hasattr(window.pageSettings, "accentCombo")
+    assert hasattr(window.pageSettings, "languageCombo")
+
+    en_index = window.pageSettings.languageCombo.findData("en")
+    window.pageSettings.languageCombo.setCurrentIndex(en_index)
+    assert config.get("language") == "en"
+
+
+def test_phase1_unified_library_local_file_and_audio_tools_signal(
+    qtbot, config, logger, fake_downloader, history, tmp_path: Path,
+):
+    window = _window(qtbot, config, logger, fake_downloader, history)
+    assert window.pageLibrary is window.pageHistory
+    assert window.navigationPanel.buttons["LibraryInterface"].text() == "Library"
+
+    audio_file = tmp_path / "demo_song.wav"
+    audio_file.write_bytes(b"RIFF0000WAVEfmt ")
+
+    opened_in_tools: list[str] = []
+    window.pageLibrary.openInAudioToolsRequested.connect(opened_in_tools.append)
+
+    with patch("src.ui.pages.library_page.get_open_file_path", return_value=audio_file):
+        window.pageLibrary._add_local()
+
+    assert len(history.getHistory()) == 1
+    card = window.pageLibrary.listLay.itemAt(0).widget()
+    card._open_audio_tools()
+    assert opened_in_tools == [str(audio_file)]
+

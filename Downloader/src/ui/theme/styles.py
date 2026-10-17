@@ -9,7 +9,7 @@ from PyQt6.QtGui import QFont, QFontDatabase
 from PyQt6.QtWidgets import QApplication
 
 from . import qss_base, qss_controls, qss_layout
-from .tokens import palette
+from .tokens import ACCENT, palette
 
 if sys.platform == "darwin":
     from . import qss_macos
@@ -17,34 +17,31 @@ if sys.platform == "darwin":
 _FONT_LOADED = False
 
 
-def applyTheme(window, config) -> None:
-    theme = config.get("theme", "dark")
-    accent = config.get("accentColor", "#2563EB")
+def applyTheme(window, config=None) -> None:
+    theme = "dark"
+    accent = ACCENT
     tokens = palette(theme)
     app = QApplication.instance()
     if app:
         app.setProperty("appTheme", theme)
         app.setProperty("accentColor", accent)
-    
-    # Build base styles
+
     styles = (
         qss_base.build(tokens, accent)
         + qss_controls.build(tokens, accent)
         + qss_layout.build(tokens, accent)
     )
-    
-    # Add macOS-specific overrides on macOS
+
     if sys.platform == "darwin":
         styles += qss_macos.build(tokens, accent)
-    
+
     window.setStyleSheet(styles)
     window.style().unpolish(window)
     window.style().polish(window)
 
 
 def isDarkTheme() -> bool:
-    app = QApplication.instance()
-    return not app or app.property("appTheme") != "light"
+    return True
 
 
 def getFont(size: int = 10, isBold: bool = False) -> QFont:

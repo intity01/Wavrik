@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import locale
 import os
 import sys
 from pathlib import Path
@@ -9,18 +10,25 @@ from typing import Any
 
 from .json_store import JsonStore
 
+
+def _default_language() -> str:
+    loc = (locale.getlocale()[0] or os.getenv("LANG", "")).lower()
+    return "th" if loc.startswith(("th", "thai")) else "en"
+
+
 DEFAULT_SETTINGS = {
     "schemaVersion": 2,
     "theme": "dark",
-    "accentColor": "#2563EB",
-    "downloadPath": str(Path.home() / "Downloads" / "MediaDownloaderPRO"),
+    "accentColor": "#2BC3B0",
+    "language": _default_language(),
+    "downloadPath": str(Path.home() / "Downloads" / "Wavrik"),
     "defaultPreset": "audio_best",
     "downloadEngine": "auto",
     "clipboardMonitoring": True,
     "minimizeToTray": False,
     "maxConcurrentDownloads": 2,
     "firstRun": True,
-    "checkUpdatesOnStartup": True,
+    "checkUpdatesOnStartup": False,
     "cookieFile": "",
     "renamePattern": "{title}",
     "downloadThumbnail": False,
@@ -30,14 +38,14 @@ DEFAULT_SETTINGS = {
     "sleepInterval": 1,
     "maxSleepInterval": 10,
 }
-_THEMES = {"dark", "light"}
+_LANGUAGES = {"th", "en"}
 
 
 class Config:
     """Load, validate, and save user settings."""
 
     VERSION = "2.1.0"
-    APP_NAME = "MediaDownloaderPRO"
+    APP_NAME = "Wavrik"
     # Set to the public owner/repository slug as part of the release process.
     GITHUB_REPO = ""
 
@@ -69,8 +77,10 @@ class Config:
             self._store.backup()
             return dict(DEFAULT_SETTINGS)
         settings["schemaVersion"] = DEFAULT_SETTINGS["schemaVersion"]
-        settings["theme"] = settings["theme"] if settings["theme"] in _THEMES else "dark"
-        settings["accentColor"] = _valid_color(settings.get("accentColor"), DEFAULT_SETTINGS["accentColor"])
+        settings["theme"] = "dark"
+        settings["accentColor"] = DEFAULT_SETTINGS["accentColor"]
+        lang = settings.get("language")
+        settings["language"] = lang if lang in _LANGUAGES else DEFAULT_SETTINGS["language"]
         settings["downloadPath"] = _valid_text(settings.get("downloadPath"), DEFAULT_SETTINGS["downloadPath"])
         settings["defaultPreset"] = _valid_text(settings.get("defaultPreset"), DEFAULT_SETTINGS["defaultPreset"])
         settings["downloadEngine"] = settings.get("downloadEngine") if settings.get("downloadEngine") in {"auto", "native", "yt-dlp"} else "auto"
@@ -126,12 +136,3 @@ def _valid_bool(value: Any, default: bool) -> bool:
 def _valid_text(value: Any, default: str) -> str:
     return value.strip() if isinstance(value, str) and value.strip() else default
 
-
-def _valid_color(value: Any, default: str) -> str:
-    if isinstance(value, str) and len(value) == 7 and value.startswith("#"):
-        try:
-            int(value[1:], 16)
-            return value.upper()
-        except ValueError:
-            pass
-    return default

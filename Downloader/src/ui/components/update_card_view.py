@@ -21,7 +21,7 @@ def build(card) -> None:
     card.statusLabel.setWordWrap(True)
     card.statusLabel.setObjectName("MutedText")
     card.startupCheck = ToggleButton("Check for updates at startup")
-    card.startupCheck.setChecked(card._cfg.get("checkUpdatesOnStartup", True))
+    card.startupCheck.setChecked(card._cfg.get("checkUpdatesOnStartup", False))
     card.startupCheck.toggled.connect(card._save_startup_preference)
     card.startupCheck.setEnabled(configured)
     card.progressBar = ProgressBar()

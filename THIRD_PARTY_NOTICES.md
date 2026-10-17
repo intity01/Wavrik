@@ -1,17 +1,17 @@
 # Third-Party Notices and Distribution Gate
 
-This source package has no declared license for Media Downloader PRO itself. Before distributing a Windows package, its copyright holder must choose a project license that is compatible with every bundled dependency or obtain the required commercial licenses. This file is an operational notice, not legal advice.
+This project is licensed under the **GNU General Public License v3.0 or later (GPL-3.0-or-later)**; see [`LICENSE`](LICENSE) for terms. This license aligns with the GPLv3 terms of the bundled PyQt6 and FFmpeg dependencies. This file is an operational notice, not legal advice.
 
 ## PyQt6
 
-This project uses PyQt6. Riverbank states that PyQt is dual-licensed under GPLv3 or the Riverbank Commercial License. A closed-source or otherwise GPL-incompatible Windows package requires an appropriate commercial PyQt license; do not assume that the LGPL license of Qt itself applies to PyQt.
+This project uses PyQt6 under the GNU General Public License v3.0 (GPLv3). Riverbank states that PyQt is dual-licensed under GPLv3 or the Riverbank Commercial License. Any distribution under GPLv3 must include the complete corresponding source code and GPLv3 license notices.
 
 - Official licensing information: https://www.riverbankcomputing.com/software/pyqt
 - License FAQ: https://www.riverbankcomputing.com/commercial/license-faq
 
 ## FFmpeg binary
 
-The bundled `ffmpeg.exe` reports itself as `8.1.1-essentials_build-www.gyan.dev`, built with `--enable-gpl --enable-version3`, and reports GPLv3-or-later terms with `ffmpeg.exe -L`. Any release that includes this executable must meet the GPL obligations for that exact build, including the applicable notices and corresponding-source obligations. Keep a reproducible source/build record for the exact FFmpeg artifact or replace it with an artifact whose licensing and source-distribution obligations have been reviewed.
+The bundled `ffmpeg.exe` reports itself as `8.1.1-essentials_build-www.gyan.dev`, built with `--enable-gpl --enable-version3`, and reports GPLv3-or-later terms with `ffmpeg.exe -L`. Any release that includes this executable must meet the GPL obligations for that exact build, including the applicable notices and corresponding-source obligations.
 
 - FFmpeg licensing guidance: https://ffmpeg.org/legal.html
 
@@ -24,8 +24,8 @@ The bundled `ffmpeg.exe` reports itself as `8.1.1-essentials_build-www.gyan.dev`
 
 ## Release checklist
 
-1. Select the Media Downloader PRO project license or obtain commercial PyQt licensing.
-2. Include this notice and all required license texts in the package.
+1. Distribute the application under GPL-3.0-or-later with [`LICENSE`](LICENSE) and complete corresponding source code.
+2. Include this notice and all required third-party license texts in the release package.
 3. Record the exact FFmpeg source, build configuration, checksum, and source-offer method.
-4. Include the license texts required by yt-dlp-ejs and Deno in the release package.
-5. Review the final distribution with legal counsel when commercial distribution or proprietary licensing is intended.
+4. Include the license texts required by yt-dlp-ejs, Deno, and Requests in the release package.
+

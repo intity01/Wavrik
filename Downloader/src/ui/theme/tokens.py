@@ -1,37 +1,29 @@
-"""Semantic theme tokens."""
+"""Semantic theme tokens (Dark Studio + Teal)."""
 
 from __future__ import annotations
 
+ACCENT = "#2BC3B0"
+
 DARK = {
-    "bg": "#0B0F16",
-    "panel": "#101722",
-    "surface": "#151E2B",
-    "surface_hover": "#1A2636",
-    "border": "#263449",
-    "border_strong": "#3A4B63",
-    "text": "#F3F6FA",
-    "text_muted": "#9AA8BA",
-    "text_subtle": "#738197",
+    "bg": "#0F1113",
+    "panel": "#15181B",
+    "surface": "#1A1E22",
+    "surface_hover": "#20262B",
+    "border": "#262C33",
+    "border_strong": "#343D46",
+    "text": "#F1F5F9",
+    "text_muted": "#94A3B8",
+    "text_subtle": "#64748B",
+    "accent": ACCENT,
+    "accent_text": "#081C19",
     "success": "#22C55E",
     "warning": "#F59E0B",
     "danger": "#EF4444",
 }
 
-LIGHT = {
-    "bg": "#F4F7FB",
-    "panel": "#FFFFFF",
-    "surface": "#FFFFFF",
-    "surface_hover": "#EEF3F9",
-    "border": "#D6DFEA",
-    "border_strong": "#AAB8C9",
-    "text": "#111827",
-    "text_muted": "#526173",
-    "text_subtle": "#6B7A8D",
-    "success": "#15803D",
-    "warning": "#B45309",
-    "danger": "#B91C1C",
-}
+LIGHT = DARK
 
 
-def palette(theme: str) -> dict[str, str]:
-    return LIGHT if theme == "light" else DARK
+def palette(_theme: str = "dark") -> dict[str, str]:
+    return DARK
+

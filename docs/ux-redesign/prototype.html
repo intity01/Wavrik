@@ -1,0 +1,508 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>App redesign prototype</title>
+<style>
+/* Tokens are scoped to .app so this prototype keeps the product's own dark/teal identity. */
+.app{
+  --bg:#0f1113; --panel:#15181b; --surface:#1a1e22; --hover:#23282d;
+  --border:#2a3036; --border-strong:#454e56;
+  --text:#eceff1; --muted:#a3adb5;
+  --accent:#2bc3b0; --accent-hover:#4bd6c4; --on-accent:#06201c; --focus:#7be8da;
+  --warn:#f0b64e; --danger:#ff9a8b;
+  --r-sm:6px; --r-md:8px; --r-lg:10px;
+  font:14px/1.5 "Segoe UI","Leelawadee UI","Noto Sans Thai",Tahoma,system-ui,sans-serif;
+  color:var(--text); background:var(--bg);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f1113;min-height:100vh}
+button,input,select{font:inherit;color:inherit}
+svg{display:block}
+.app :focus{outline:none}
+.app :focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:var(--r-sm)}
+[hidden]{display:none!important}
+
+.proto{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:8px 16px;background:var(--surface);border-bottom:1px dashed var(--border-strong);font-size:13px;color:var(--muted)}
+.proto b{color:var(--warn);font-weight:600}
+.shell{display:grid;grid-template-columns:176px minmax(0,1fr);min-height:calc(100vh - 42px)}
+.side{background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:12px 8px;gap:4px}
+.brand{display:flex;align-items:center;gap:10px;padding:4px 8px 14px}
+.brand svg{width:28px;height:28px;flex:none}
+.brand span{font-weight:700;font-size:13px;line-height:1.25}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav.bottom{margin-top:auto;border-top:1px solid var(--border);padding-top:8px}
+.nav button{display:flex;align-items:center;gap:10px;min-height:40px;padding:0 10px;background:none;border:1px solid transparent;border-radius:var(--r-md);cursor:pointer;color:var(--muted);text-align:left}
+.nav button svg{width:20px;height:20px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.nav button:hover{background:var(--hover);color:var(--text)}
+.nav button[aria-current="page"]{background:var(--surface);color:var(--text);border-color:var(--accent)}
+.nav button[aria-current="page"] svg{color:var(--accent)}
+
+.main{min-width:0}
+.page{display:none;padding:20px 24px 28px}
+.page.on{display:block}
+.page.wb{padding:0}
+h1{font-size:20px;line-height:1.3;margin-bottom:14px}
+h2{font-size:15px;line-height:1.3}
+.h{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+[lang="th"] .h{text-transform:none;letter-spacing:0;font-size:14px}
+.muted{color:var(--muted)} .small{font-size:13px}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.grow{flex:1;min-width:0}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:38px;padding:0 14px;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--r-md);cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--hover);border-color:#5c6770}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:700}
+.btn.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.btn.sq{width:44px;padding:0;font-size:22px;line-height:1}
+.btn.danger{border-color:var(--danger);color:var(--danger)}
+.btn[aria-disabled="true"],.btn:disabled{color:var(--muted);border-style:dashed;cursor:not-allowed;background:var(--surface)}
+.btn.link{background:none;border-color:transparent;color:var(--accent);padding:0 8px}
+.btn.link:hover{background:var(--hover)}
+.seg{display:inline-flex;border:1px solid var(--border-strong);border-radius:var(--r-md);overflow:hidden;background:var(--surface)}
+.seg button{min-height:38px;min-width:64px;padding:0 14px;background:none;border:0;border-right:1px solid var(--border-strong);cursor:pointer}
+.seg button:last-child{border-right:0}
+.seg button:hover{background:var(--hover)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent);font-weight:700}
+.seg button[aria-disabled="true"]{color:var(--muted);background:var(--bg)}
+.seg button[aria-disabled="true"]:hover{background:var(--bg)}
+input[type=text],input[type=search],select{min-height:38px;padding:0 10px;background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--r-md);color:var(--text);max-width:100%}
+input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent);flex:none}
+label.chk{display:inline-flex;align-items:center;gap:8px;min-height:38px;cursor:pointer}
+label.fld{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+label.fld select{color:var(--text);font-size:14px}
+.badge{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 9px;border-radius:var(--r-sm);border:1px solid var(--border-strong);font-size:13px;white-space:nowrap}
+.badge.warn{border-color:var(--warn);color:var(--warn)}
+.badge.ok{border-color:var(--accent);color:var(--accent)}
+.badge.err{border-color:var(--danger);color:var(--danger)}
+.prog{height:8px;border-radius:4px;background:var(--bg);border:1px solid var(--border-strong);overflow:hidden}
+.prog>i{display:block;height:100%;background:var(--accent);width:0}
+details>summary{display:flex;align-items:center;gap:8px;min-height:40px;cursor:pointer;list-style:none;font-weight:600;border-radius:var(--r-sm)}
+details>summary::-webkit-details-marker{display:none}
+details>summary::before{content:"";width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg);flex:none;margin:0 4px 0 2px}
+details[open]>summary::before{transform:rotate(45deg)}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--r-md);padding:14px}
+.list{list-style:none;border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden}
+.list>li{display:flex;align-items:center;gap:14px;padding:10px 14px;min-height:60px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.list>li:last-child{border-bottom:0}
+.list .title{font-weight:600;overflow-wrap:anywhere}
+.empty{border:1px dashed var(--border-strong);border-radius:var(--r-md);padding:28px 20px;text-align:center}
+.empty h2{margin-bottom:6px}
+
+/* Audio workbench */
+.wbgrid{display:grid;grid-template-columns:minmax(0,1fr) 312px;min-height:calc(100vh - 42px)}
+.stage{padding:16px 20px;min-width:0}
+.insp{border-left:1px solid var(--border);background:var(--panel)}
+.ds{border-bottom:1px solid var(--border);padding:0 14px}
+.ds>summary{min-height:44px;font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+[lang="th"] .ds>summary{text-transform:none;letter-spacing:0;font-size:14px}
+.ds[open]>summary{color:var(--text)}
+.body{display:flex;flex-direction:column;gap:10px;padding:2px 0 14px}
+.wf{position:relative;height:150px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden;cursor:pointer;user-select:none;touch-action:none}
+.wf svg{width:100%;height:100%}
+.wf path{stroke:#6f7c85;stroke-width:2;vector-effect:non-scaling-stroke;fill:none}
+.sel{position:absolute;top:0;bottom:0;background:rgba(43,195,176,.18);border-left:3px solid var(--accent);border-right:3px solid var(--accent)}
+.sel:focus-visible{outline-offset:-3px}
+.ph{position:absolute;top:0;bottom:0;width:2px;background:var(--text);display:none;pointer-events:none}
+.ticks{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);padding-top:4px;font-variant-numeric:tabular-nums}
+.dock{display:flex;flex-direction:column;gap:12px;margin-top:12px;padding:14px;background:var(--panel);border:1px solid var(--border);border-radius:var(--r-md)}
+.drow{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.drow>.h{min-width:92px}
+.stval{min-width:96px;text-align:center;font-size:38px;line-height:1.1;font-weight:700;font-variant-numeric:tabular-nums}
+.stunit{font-size:13px;color:var(--muted);text-align:center}
+.kv{display:flex;flex-direction:column;gap:4px}
+.big{font-size:22px;font-weight:700}
+.statusline{min-height:22px}
+.statusline.warn{color:var(--warn)}
+dialog{margin:auto;max-width:min(460px,92vw);padding:20px;background:var(--surface);color:var(--text);border:1px solid var(--border-strong);border-radius:var(--r-lg)}
+dialog::backdrop{background:rgba(0,0,0,.72)}
+dialog h2{font-size:17px;margin-bottom:8px}
+dialog p{margin-bottom:16px}
+dialog .row{justify-content:flex-end}
+#toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--text);color:#101214;padding:10px 16px;border-radius:var(--r-md);max-width:min(560px,92vw);font-weight:600;opacity:0;pointer-events:none;z-index:20}
+#toast.on{opacity:1}
+.setrow{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid var(--border)}
+.setrow:last-child{border-bottom:0}
+.setgrp{margin-bottom:18px;max-width:720px}
+@media (max-width:900px){
+  .shell{grid-template-columns:132px minmax(0,1fr)}
+  .brand span{display:none}
+  .page{padding:16px}
+  .wbgrid{display:block}
+  .insp{border-left:0;border-top:1px solid var(--border)}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-dl" viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 19h14"/></symbol>
+  <symbol id="i-lib" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></symbol>
+  <symbol id="i-au" viewBox="0 0 24 24"><path d="M4 12v0M8 8v8M12 4v16M16 9v6M20 11v2"/></symbol>
+  <symbol id="i-set" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6l2.1 2.1M18.4 5.6l-2.1 2.1m-8.6 8.6l-2.1 2.1"/></symbol>
+</svg>
+
+<div class="app" id="app" lang="en">
+  <div class="proto">
+    <b data-i="proto">Design prototype</b>
+    <span class="grow" data-i="protoNote"></span>
+    <span class="row"><span data-i="demoState"></span>
+      <span class="seg" role="group"><button id="dEmpty" aria-pressed="false" data-i="demoEmpty"></button><button id="dItems" aria-pressed="true" data-i="demoItems"></button></span>
+    </span>
+    <span class="seg" role="group" aria-label="Language"><button id="lEn" aria-pressed="true">English</button><button id="lTh" aria-pressed="false">ไทย</button></span>
+  </div>
+  <div class="shell">
+    <aside class="side">
+      <div class="brand">
+        <svg viewBox="0 0 512 512" aria-hidden="true"><rect x="16" y="16" width="480" height="480" rx="108" fill="#2bc3b0"/><g stroke="#0b2421" stroke-width="40" stroke-linecap="round" fill="none"><path d="M120 360v-24"/><path d="M204 360v-90"/><path d="M288 360v-150"/><path d="M372 360v-210"/></g></svg>
+        <span data-i="brand">Media Downloader PRO</span>
+      </div>
+      <nav class="nav" aria-label="Main" id="nav">
+        <button data-page="dl" aria-current="page"><svg><use href="#i-dl"/></svg><span data-i="nDl"></span></button>
+        <button data-page="lib"><svg><use href="#i-lib"/></svg><span data-i="nLib"></span></button>
+        <button data-page="au"><svg><use href="#i-au"/></svg><span data-i="nAu"></span></button>
+      </nav>
+      <nav class="nav bottom" aria-label="Secondary">
+        <button data-page="set"><svg><use href="#i-set"/></svg><span data-i="nSet"></span></button>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <!-- DOWNLOADS -->
+      <section class="page on" id="p-dl">
+        <h1 data-i="nDl"></h1>
+        <div class="row" style="margin-bottom:10px">
+          <input type="text" class="grow" style="min-width:220px" data-ph="dlPh" aria-label="Link">
+          <button class="btn primary" data-i="dlAdd"></button>
+          <button class="btn" id="openLocal" data-i="dlOpen"></button>
+        </div>
+        <div class="panel" style="margin-bottom:16px">
+          <div class="row">
+            <span class="muted small" data-i="dlSave"></span>
+            <span class="grow small" style="overflow-wrap:anywhere">C:\Users\You\Music\Downloads</span>
+            <button class="btn" data-i="dlChange"></button>
+          </div>
+          <p class="muted small" style="margin-top:8px" data-i="dlFmt"></p>
+          <details style="margin-top:4px"><summary data-i="dlAdv"></summary>
+            <div class="row" style="padding:6px 0 4px">
+              <label class="fld"><span data-i="dlAdvFmt"></span><select><option>WAV 24-bit</option><option>FLAC</option><option>MP3 320 kbps</option></select></label>
+            </div>
+          </details>
+        </div>
+        <div id="queueEmpty" class="empty" hidden>
+          <h2 data-i="emptyT"></h2><p class="muted" data-i="emptyB"></p>
+        </div>
+        <div id="queueWrap">
+          <div class="row" style="justify-content:space-between;margin-bottom:8px">
+            <span class="h" id="qCount"></span>
+            <button class="btn primary" id="dlAll"></button>
+          </div>
+          <ul class="list" id="queue"></ul>
+        </div>
+      </section>
+
+      <!-- LIBRARY -->
+      <section class="page" id="p-lib">
+        <h1 data-i="nLib"></h1>
+        <div class="row" style="margin-bottom:12px">
+          <input type="search" id="libQ" class="grow" style="min-width:220px" data-ph="libSearch" aria-label="Search">
+          <button class="btn" data-open="local" data-i="dlOpen"></button>
+        </div>
+        <ul class="list" id="libList"></ul>
+        <p class="muted" id="libEmpty" hidden style="padding:16px 0" data-i="libEmpty"></p>
+      </section>
+
+      <!-- AUDIO TOOLS -->
+      <section class="page wb" id="p-au">
+        <div class="wbgrid">
+          <div class="stage">
+            <div class="row" style="justify-content:space-between;margin-bottom:10px">
+              <div>
+                <h1 style="margin:0" data-i="nAu"></h1>
+                <div class="row" style="margin-top:2px"><span style="font-weight:600">Example track 01</span><span class="badge" data-i="auMeta"></span></div>
+              </div>
+              <button class="btn" data-open="local" data-i="auChange"></button>
+            </div>
+            <div class="wf" id="wf" aria-label="Waveform">
+              <svg id="wfsvg" viewBox="0 0 600 150" preserveAspectRatio="none" aria-hidden="true"></svg>
+              <div class="sel" id="sel" tabindex="0" role="slider" aria-label="Preview section" aria-valuemin="0" aria-valuemax="191"></div>
+              <div class="ph" id="ph"></div>
+            </div>
+            <div class="ticks"><span>0:00</span><span>0:48</span><span>1:36</span><span>2:23</span><span>3:11</span></div>
+            <div class="row" style="margin-top:8px">
+              <span class="h" data-i="secLen"></span>
+              <span class="seg" id="lenSeg" role="group"><button data-len="10" aria-pressed="false">10 s</button><button data-len="15" aria-pressed="true">15 s</button><button data-len="30" aria-pressed="false">30 s</button></span>
+              <span class="muted small" id="selTxt"></span>
+            </div>
+
+            <div class="dock">
+              <div class="drow">
+                <span class="h" data-i="pitch"></span>
+                <button class="btn sq" id="pMinus" aria-label="-1">−</button>
+                <div><div class="stval" id="pVal">0</div><div class="stunit" data-i="semi"></div></div>
+                <button class="btn sq" id="pPlus" aria-label="+1">+</button>
+                <button class="btn" id="pReset" data-i="reset"></button>
+                <label class="chk"><input type="checkbox" id="ext"><span data-i="ext"></span></label>
+              </div>
+              <div class="small warn-t" id="extWarn" hidden style="color:var(--warn)" data-i="extWarn"></div>
+              <div class="drow">
+                <span class="h" data-i="compare"></span>
+                <button class="btn primary" id="build" data-i="build"></button>
+                <span class="seg" id="srcSeg" role="group"><button data-src="orig" aria-pressed="true" data-i="orig"></button><button data-src="adj" aria-pressed="false" aria-disabled="true" data-i="adj"></button></span>
+                <button class="btn" id="play"></button>
+              </div>
+              <div class="prog" id="prog" hidden><i id="progBar"></i></div>
+              <div class="statusline small" id="status" aria-live="polite"></div>
+            </div>
+          </div>
+
+          <aside class="insp">
+            <details class="ds" open><summary data-i="track"></summary>
+              <div class="body">
+                <div class="kv"><span class="muted small" data-i="key"></span>
+                  <div class="row"><span class="big" id="keyVal">A minor</span><span class="badge warn" id="keyBadge"></span><button class="btn link" id="keyEdit" data-i="edit"></button></div>
+                  <select id="keySel" hidden aria-label="Key"></select>
+                  <span class="small muted" id="keyAlt"></span>
+                </div>
+                <div class="kv"><span class="muted small">BPM</span>
+                  <div class="row"><span class="big" id="bpmVal">128</span><span class="badge warn" id="bpmBadge" data-i="est"></span></div>
+                  <div class="row"><button class="btn" id="bpmHalf" data-i="half"></button><button class="btn" id="bpmDbl" data-i="dbl"></button></div>
+                </div>
+                <p class="small" id="target"></p>
+                <p class="small" style="color:var(--warn)" data-i="unsure"></p>
+                <details><summary data-i="tempoHelp"></summary>
+                  <div class="row" style="padding:4px 0"><button class="btn" id="tap" data-i="tap"></button><span class="muted small" id="tapOut">—</span></div>
+                </details>
+              </div>
+            </details>
+            <details class="ds" open><summary data-i="exp"></summary>
+              <div class="body">
+                <p class="small muted"><span data-i="expName"></span><br><b style="color:var(--text);overflow-wrap:anywhere" id="expFile">Example track 01_pitch0.wav</b></p>
+                <button class="btn primary" id="export" data-i="expBtn"></button>
+                <p class="small muted" id="expHint"></p>
+                <details><summary data-i="expAdv"></summary>
+                  <div class="body">
+                    <label class="fld"><span data-i="sr"></span><select><option data-i="keep"></option><option>48 kHz</option></select></label>
+                    <label class="fld"><span data-i="bd"></span><select><option>PCM 24-bit</option><option>PCM 16-bit</option></select></label>
+                  </div>
+                </details>
+              </div>
+            </details>
+          </aside>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section class="page" id="p-set">
+        <h1 data-i="nSet"></h1>
+        <div class="setgrp"><h2 style="margin-bottom:4px" data-i="setApp"></h2>
+          <div class="setrow"><div><div data-i="setLang"></div><div class="small muted" data-i="setDark"></div></div>
+            <span class="seg" role="group"><button id="sEn" aria-pressed="true">English</button><button id="sTh" aria-pressed="false">ไทย</button></span></div>
+          <div class="setrow"><div><div data-i="setConc"></div><div class="small muted" data-i="setConcNote"></div></div>
+            <span class="row"><button class="btn sq" id="cMinus" aria-label="-1">−</button><b id="cVal" style="min-width:24px;text-align:center">2</b><button class="btn sq" id="cPlus" aria-label="+1">+</button></span></div>
+          <div class="setrow"><div data-i="setClip"></div>
+            <button class="btn" id="clip" aria-pressed="true"></button></div>
+        </div>
+        <div class="setgrp"><h2 style="margin-bottom:4px" data-i="setUpd"></h2>
+          <div class="setrow"><div><div class="small muted" data-i="setUpdNote"></div><div class="small" id="updOut"></div></div>
+            <button class="btn" id="chk" data-i="setChk"></button></div>
+        </div>
+        <div class="setgrp"><h2 style="margin-bottom:4px" data-i="setData"></h2>
+          <div class="setrow"><div class="small muted" data-i="setClearNote"></div>
+            <button class="btn danger" id="clear" data-i="setClear"></button></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="gate"><h2 data-i="gateT"></h2><p class="muted" data-i="gateB"></p>
+    <div class="row"><button class="btn" id="gateBack" data-i="gateBack"></button><button class="btn primary" id="gateGo" data-i="gateGo"></button></div></dialog>
+  <dialog id="confirmClear"><h2 data-i="clearT"></h2><p class="muted" data-i="clearB"></p>
+    <div class="row"><button class="btn" id="clearNo" data-i="cancel"></button><button class="btn danger" id="clearYes" data-i="setClear"></button></div></dialog>
+  <div id="toast" role="status"></div>
+</div>
+
+<script>
+const TXT={
+en:{proto:"Design prototype",protoNote:"No files are downloaded or processed here.",demoState:"Queue:",demoEmpty:"Empty",demoItems:"With items",
+brand:"Media Downloader PRO",nDl:"Downloads",nLib:"Library",nAu:"Audio Tools",nSet:"Settings",
+dlPh:"Paste a link",dlAdd:"Add link",dlOpen:"Open audio file",dlSave:"Save to",dlChange:"Change folder",
+dlFmt:"Output: WAV, 24-bit. A WAV file does not add quality the source does not have.",dlAdv:"Advanced options",dlAdvFmt:"Format",
+emptyT:"Start with a link or a file",emptyB:"Paste a link to download audio, or open a file you already have. Then open it in Audio Tools to check the key and change pitch.",
+stDone:"Completed",stDl:"Downloading",stFetch:"Reading link",stErr:"Failed",
+actOpen:"Open in Audio Tools",actFolder:"Show in folder",actCancel:"Cancel",actRetry:"Retry",actRemove:"Remove from list",
+errMsg:"Could not read this link. Check the address, then retry.",
+all:"Download all",queue:"Queue",
+libSearch:"Search by title",libEmpty:"No files match your search.",srcDl:"Downloaded",srcLocal:"Local file",
+auMeta:"WAV 24-bit · 44.1 kHz · 3:11",auChange:"Change file",
+secLen:"Preview section",pitch:"Pitch",semi:"semitones",reset:"Reset",ext:"Allow extended range (±12)",extWarn:"Large shifts are more likely to sound unnatural.",
+compare:"Compare",build:"Build preview",orig:"Original",adj:"Adjusted",play:"Play",pause:"Pause",
+mNone:"Choose a shift, then build a preview.",mBuilding:"Building preview…",mReady:"Preview ready. Adjusted is unlocked.",mStale:"Settings changed. Build a new preview to hear the change.",
+track:"Track",key:"Key",est:"Estimate",corr:"Corrected by you",edit:"Correct",alt:"Close alternative: ",
+target:"Target key: {t} (derived from {k} and {s} semitones)",targetNone:"Target key: no shift set.",
+unsure:"Analysis is not certain. Check by ear or correct it.",tempoHelp:"Tempo helper",tap:"Tap BPM",half:"Half",dbl:"Double",
+exp:"Export",expName:"Saved beside the original as",expBtn:"Export WAV",expAdv:"Advanced",sr:"Sample rate",keep:"Keep source (44.1 kHz)",bd:"Bit depth",expNone:"Set a shift other than 0 to export.",expOk:"Whole song, same tempo.",
+gateT:"Export without listening?",gateB:"You have not listened to a preview of this setting.",gateBack:"Back to preview",gateGo:"Export anyway",exported:"Export finished (prototype: no file written).",
+setApp:"Application",setLang:"Language",setDark:"Dark theme is the only theme.",setConc:"Downloads at once",setConcNote:"Audio processing runs one job at a time.",setClip:"Watch clipboard for links",on:"On",off:"Off",
+setUpd:"Updates",setChk:"Check for updates",setUpdNote:"The app only checks when you press this button.",updNever:"Not checked yet.",updNone:"You have the latest version (prototype).",
+setData:"Data",setClear:"Clear history and per-file settings",setClearNote:"Songs and exported files are never deleted.",clearT:"Clear history and saved settings?",clearB:"This removes the list and the corrections remembered for each file. Your songs and exports stay on disk.",cancel:"Cancel",cleared:"History cleared (prototype)."},
+th:{proto:"ต้นแบบการออกแบบ",protoNote:"ไม่มีการดาวน์โหลดหรือประมวลผลไฟล์จริง",demoState:"คิว:",demoEmpty:"ว่าง",demoItems:"มีรายการ",
+brand:"Media Downloader PRO",nDl:"ดาวน์โหลด",nLib:"คลังไฟล์",nAu:"เครื่องมือเสียง",nSet:"ตั้งค่า",
+dlPh:"วางลิงก์",dlAdd:"เพิ่มลิงก์",dlOpen:"เปิดไฟล์เสียง",dlSave:"บันทึกไปที่",dlChange:"เปลี่ยนโฟลเดอร์",
+dlFmt:"ไฟล์ผลลัพธ์: WAV 24-bit — WAV ไม่ได้เพิ่มคุณภาพที่ต้นฉบับไม่มี",dlAdv:"ตัวเลือกขั้นสูง",dlAdvFmt:"รูปแบบไฟล์",
+emptyT:"เริ่มจากลิงก์หรือไฟล์",emptyB:"วางลิงก์เพื่อดาวน์โหลดเสียง หรือเปิดไฟล์ที่มีอยู่แล้ว จากนั้นเปิดใน เครื่องมือเสียง เพื่อดูคีย์และปรับระดับเสียง",
+stDone:"เสร็จแล้ว",stDl:"กำลังดาวน์โหลด",stFetch:"กำลังอ่านลิงก์",stErr:"ล้มเหลว",
+actOpen:"เปิดในเครื่องมือเสียง",actFolder:"แสดงในโฟลเดอร์",actCancel:"ยกเลิก",actRetry:"ลองใหม่",actRemove:"ลบออกจากรายการ",
+errMsg:"อ่านลิงก์นี้ไม่ได้ ตรวจสอบที่อยู่ลิงก์แล้วลองใหม่",
+all:"ดาวน์โหลดทั้งหมด",queue:"คิว",
+libSearch:"ค้นหาจากชื่อเพลง",libEmpty:"ไม่พบไฟล์ที่ตรงกับคำค้นหา",srcDl:"ดาวน์โหลด",srcLocal:"ไฟล์ในเครื่อง",
+auMeta:"WAV 24-bit · 44.1 kHz · 3:11",auChange:"เปลี่ยนไฟล์",
+secLen:"ช่วงพรีวิว",pitch:"ระดับเสียง",semi:"เซมิโทน",reset:"รีเซ็ต",ext:"เปิดช่วงขยาย (±12)",extWarn:"การปรับมากๆ มีโอกาสทำให้เสียงไม่เป็นธรรมชาติ",
+compare:"เปรียบเทียบ",build:"สร้างพรีวิว",orig:"ต้นฉบับ",adj:"ปรับแล้ว",play:"เล่น",pause:"หยุดชั่วคราว",
+mNone:"เลือกค่าการปรับ แล้วสร้างพรีวิว",mBuilding:"กำลังสร้างพรีวิว…",mReady:"พรีวิวพร้อมแล้ว ปลดล็อกเสียงที่ปรับแล้ว",mStale:"ค่าที่ตั้งเปลี่ยนไป สร้างพรีวิวใหม่เพื่อฟังผลลัพธ์",
+track:"ข้อมูลเพลง",key:"คีย์",est:"ค่าประมาณ",corr:"คุณแก้ไขแล้ว",edit:"แก้ไข",alt:"ตัวเลือกใกล้เคียง: ",
+target:"คีย์ปลายทาง: {t} (คำนวณจาก {k} และ {s} เซมิโทน)",targetNone:"คีย์ปลายทาง: ยังไม่ได้ตั้งค่าการปรับ",
+unsure:"การวิเคราะห์ยังไม่แน่ใจ ตรวจด้วยหูหรือแก้ไขเอง",tempoHelp:"ตัวช่วยจังหวะ",tap:"แตะจังหวะ",half:"ครึ่ง",dbl:"สองเท่า",
+exp:"ส่งออก",expName:"บันทึกข้างไฟล์ต้นฉบับเป็น",expBtn:"ส่งออก WAV",expAdv:"ขั้นสูง",sr:"ความถี่สุ่ม",keep:"ใช้ตามต้นฉบับ (44.1 kHz)",bd:"ความลึกบิต",expNone:"ตั้งค่าการปรับให้ไม่ใช่ 0 จึงจะส่งออกได้",expOk:"ทั้งเพลง จังหวะเท่าเดิม",
+gateT:"ส่งออกโดยยังไม่ได้ฟัง?",gateB:"คุณยังไม่ได้ฟังพรีวิวของค่าที่ตั้งนี้",gateBack:"กลับไปพรีวิว",gateGo:"ส่งออกเลย",exported:"ส่งออกเสร็จแล้ว (ต้นแบบ: ไม่ได้เขียนไฟล์จริง)",
+setApp:"แอปพลิเคชัน",setLang:"ภาษา",setDark:"ใช้ธีมมืดเพียงแบบเดียว",setConc:"ดาวน์โหลดพร้อมกัน",setConcNote:"การประมวลผลเสียงทำทีละงาน",setClip:"ตรวจลิงก์จากคลิปบอร์ด",on:"เปิด",off:"ปิด",
+setUpd:"อัปเดต",setChk:"ตรวจหาอัปเดต",setUpdNote:"แอปจะตรวจเมื่อคุณกดปุ่มนี้เท่านั้น",updNever:"ยังไม่เคยตรวจ",updNone:"คุณใช้เวอร์ชันล่าสุดแล้ว (ต้นแบบ)",
+setData:"ข้อมูล",setClear:"ล้างประวัติและค่าที่จำไว้ต่อไฟล์",setClearNote:"ไม่ลบเพลงหรือไฟล์ที่ส่งออก",clearT:"ล้างประวัติและค่าที่จำไว้?",clearB:"จะลบรายการและค่าที่แก้ไขของแต่ละไฟล์ เพลงและไฟล์ส่งออกยังอยู่ในเครื่อง",cancel:"ยกเลิก",cleared:"ล้างประวัติแล้ว (ต้นแบบ)"}
+};
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const S={lang:'en',page:'dl',items:true,pitch:0,ext:false,start:30,len:15,built:null,building:false,heard:false,playing:false,src:'orig',
+  key:{note:'A',mode:'minor',user:false},bpm:128,conc:2,clip:true,upd:false,pos:0,timers:{}};
+const T=k=>TXT[S.lang][k]||k;
+const NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const keyName=k=>k.note+' '+k.mode;
+const shiftKey=(k,n)=>({note:NOTES[(NOTES.indexOf(k.note)+n+120)%12],mode:k.mode});
+const relative=k=>k.mode==='minor'?{note:NOTES[(NOTES.indexOf(k.note)+3)%12],mode:'major'}:{note:NOTES[(NOTES.indexOf(k.note)+9)%12],mode:'minor'};
+const toast=m=>{const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(S.timers.toast);S.timers.toast=setTimeout(()=>t.classList.remove('on'),2600)};
+
+/* waveform */
+(function(){let d='';for(let i=0;i<300;i++){const x=i*2+1;const a=.25+.55*Math.abs(Math.sin(i/9)*Math.cos(i/23))+.15*Math.abs(Math.sin(i*1.7));const h=Math.min(68,a*70);d+=`M${x} ${75-h}V${75+h}`}
+$('#wfsvg').innerHTML=`<path d="${d}"/>`})();
+
+function curSettings(){return {p:S.pitch,s:S.start,l:S.len}}
+function builtCurrent(){return S.built&&S.built.p===S.pitch&&S.built.s===S.start&&S.built.l===S.len}
+function stopPlay(){S.playing=false;clearInterval(S.timers.play);$('#ph').style.display='none'}
+function invalidate(){ // R08: any change stops adjusted playback, returns to Original, locks Adjusted
+  if(S.src==='adj'){stopPlay();S.src='orig'}
+  S.heard=false;
+  if(S.building){S.building=false;clearInterval(S.timers.build)}
+}
+function render(){
+  const lang=S.lang;$('#app').lang=lang;
+  $$('[data-i]').forEach(e=>e.textContent=T(e.dataset.i));
+  $$('[data-ph]').forEach(e=>e.placeholder=T(e.dataset.ph));
+  $$('#nav button,.nav.bottom button').forEach(b=>b.setAttribute('aria-current',b.dataset.page===S.page?'page':'false'));
+  $$('.page').forEach(p=>p.classList.toggle('on',p.id==='p-'+S.page));
+  [['lEn','en'],['sEn','en']].forEach(([id])=>$('#'+id).setAttribute('aria-pressed',lang==='en'));
+  [['lTh'],['sTh']].forEach(([id])=>$('#'+id).setAttribute('aria-pressed',lang==='th'));
+  $('#dEmpty').setAttribute('aria-pressed',!S.items);$('#dItems').setAttribute('aria-pressed',S.items);
+  renderQueue();renderLib();renderAudio();renderSettings();
+}
+/* downloads */
+const QUEUE=[
+ {t:'Example track 01',st:'done',meta:'WAV · 3:11'},
+ {t:'Example track 02',st:'dl',pct:62},
+ {t:'Example track 03',st:'fetch'},
+ {t:'https://example.invalid/broken-link',st:'err'}];
+function renderQueue(){
+  $('#queueEmpty').hidden=S.items;$('#queueWrap').hidden=!S.items;
+  const startable=QUEUE.filter(q=>q.st==='fetch').length;
+  $('#qCount').textContent=T('queue')+' · '+QUEUE.length;
+  const all=$('#dlAll');all.textContent=T('all')+' ('+startable+')';all.setAttribute('aria-disabled',startable?'false':'true');
+  $('#queue').innerHTML=QUEUE.map(q=>{
+    const badge={done:`<span class="badge ok">${T('stDone')}</span>`,dl:`<span class="badge">${T('stDl')} ${q.pct}%</span>`,fetch:`<span class="badge">${T('stFetch')}</span>`,err:`<span class="badge err">${T('stErr')}</span>`}[q.st];
+    const acts={done:`<button class="btn primary" data-open="track">${T('actOpen')}</button><button class="btn">${T('actFolder')}</button>`,
+      dl:`<button class="btn">${T('actCancel')}</button>`,fetch:`<button class="btn">${T('actCancel')}</button>`,
+      err:`<button class="btn">${T('actRetry')}</button><button class="btn">${T('actRemove')}</button>`}[q.st];
+    const sub=q.st==='err'?`<div class="small" style="color:var(--danger)">${T('errMsg')}</div>`:q.st==='dl'?`<div class="prog" style="width:220px;margin-top:6px"><i style="width:${q.pct}%"></i></div>`:q.meta?`<div class="small muted">${q.meta}</div>`:'';
+    return `<li><div class="grow"><div class="title">${q.t}</div>${sub}</div>${badge}<div class="row">${acts}</div></li>`}).join('');
+}
+/* library */
+const LIB=[{t:'Example track 01',src:'dl',meta:'WAV · 3:11',note:true},{t:'Backing track demo',src:'local',meta:'WAV · 4:02'},{t:'Example track 05',src:'dl',meta:'FLAC · 2:48'},{t:'ตัวอย่างเพลงภาษาไทย',src:'local',meta:'WAV · 3:35'}];
+function renderLib(){
+  const q=$('#libQ').value.trim().toLowerCase();
+  const rows=LIB.filter(r=>r.t.toLowerCase().includes(q));
+  $('#libEmpty').hidden=rows.length>0;
+  $('#libList').innerHTML=rows.map(r=>`<li><div class="grow"><div class="title">${r.t}</div><div class="small muted">${r.meta}</div></div><span class="badge">${r.src==='dl'?T('srcDl'):T('srcLocal')}</span><div class="row"><button class="btn primary" data-open="track">${T('actOpen')}</button><button class="btn">${T('actFolder')}</button></div></li>`).join('');
+}
+/* audio tools */
+function fmt(s){return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0')}
+function renderAudio(){
+  const sel=$('#sel');sel.style.left=(S.start/191*100)+'%';sel.style.width=(S.len/191*100)+'%';
+  sel.setAttribute('aria-valuenow',S.start);sel.setAttribute('aria-valuetext',fmt(S.start)+' – '+fmt(S.start+S.len));
+  $('#selTxt').textContent=fmt(S.start)+' – '+fmt(S.start+S.len);
+  $$('#lenSeg button').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.len===S.len));
+  const lim=S.ext?12:5;S.pitch=Math.max(-lim,Math.min(lim,S.pitch));
+  $('#pVal').textContent=(S.pitch>0?'+':S.pitch<0?'−':'')+Math.abs(S.pitch);
+  $('#pMinus').setAttribute('aria-disabled',S.pitch<=-lim);$('#pPlus').setAttribute('aria-disabled',S.pitch>=lim);
+  $('#extWarn').hidden=!S.ext;
+  const cur=builtCurrent();const stale=S.built&&!cur;
+  const b=$('#build');b.textContent=T('build');b.setAttribute('aria-disabled',S.pitch===0||S.building||cur);
+  const adj=$('#srcSeg [data-src=adj]');adj.setAttribute('aria-disabled',!cur);
+  $$('#srcSeg button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.src===S.src));
+  const pb=$('#play');pb.textContent=S.playing?T('pause'):T('play');pb.setAttribute('aria-disabled',S.src==='adj'&&!cur);
+  $('#prog').hidden=!S.building;
+  const st=$('#status');st.classList.toggle('warn',!!stale);
+  st.textContent=S.building?T('mBuilding'):cur?T('mReady'):stale?T('mStale'):T('mNone');
+  /* key / bpm / target */
+  const k=S.key;$('#keyVal').textContent=keyName(k);
+  const kb=$('#keyBadge');kb.textContent=k.user?T('corr'):T('est');kb.className='badge '+(k.user?'ok':'warn');
+  $('#keyAlt').textContent=k.user?'':T('alt')+keyName(relative(k));
+  $('#bpmVal').textContent=S.bpm;
+  $('#bpmBadge').textContent=T('est');
+  $('#target').textContent=S.pitch===0?T('targetNone'):T('target').replace('{t}',keyName(shiftKey(k,S.pitch))).replace('{k}',keyName(k)).replace('{s}',(S.pitch>0?'+':'−')+Math.abs(S.pitch));
+  const tag=S.pitch===0?'0':(S.pitch>0?'+':'-')+Math.abs(S.pitch);
+  $('#expFile').textContent='Example track 01_pitch'+tag+'.wav';
+  const ex=$('#export');ex.setAttribute('aria-disabled',S.pitch===0);
+  $('#expHint').textContent=S.pitch===0?T('expNone'):T('expOk');
+}
+function change(fn){fn();invalidate();renderAudio()}
+function startPlay(){
+  stopPlay();S.playing=true;S.pos=0;const ph=$('#ph');ph.style.display='block';const t0=Date.now();
+  S.timers.play=setInterval(()=>{const e=(Date.now()-t0)/1000%S.len;ph.style.left=((S.start+e)/191*100)+'%';
+    if(S.src==='adj'&&builtCurrent()&&Date.now()-t0>1000&&!S.heard){S.heard=true}},100);
+}
+$('#play').onclick=()=>{ if($('#play').getAttribute('aria-disabled')==='true')return; S.playing?stopPlay():startPlay(); renderAudio()};
+$('#build').onclick=()=>{ if($('#build').getAttribute('aria-disabled')==='true')return;
+  S.building=true;let n=0;$('#progBar').style.width='0';clearInterval(S.timers.build);
+  S.timers.build=setInterval(()=>{n+=12;$('#progBar').style.width=Math.min(n,100)+'%';
+    if(n>=100){clearInterval(S.timers.build);S.building=false;S.built=curSettings();S.heard=false;renderAudio()}},260);renderAudio()};
+$$('#srcSeg button').forEach(b=>b.onclick=()=>{ if(b.getAttribute('aria-disabled')==='true')return; const was=S.playing; stopPlay(); S.src=b.dataset.src; S.heard=false; if(was)startPlay(); renderAudio()});
+$('#pMinus').onclick=()=>change(()=>S.pitch--);$('#pPlus').onclick=()=>change(()=>S.pitch++);$('#pReset').onclick=()=>change(()=>S.pitch=0);
+$('#ext').onchange=e=>change(()=>{S.ext=e.target.checked});
+$$('#lenSeg button').forEach(b=>b.onclick=()=>change(()=>{S.len=+b.dataset.len;S.start=Math.min(S.start,191-S.len)}));
+$('#wf').addEventListener('pointerdown',e=>{const r=$('#wf').getBoundingClientRect();const t=(e.clientX-r.left)/r.width*191-S.len/2;change(()=>S.start=Math.round(Math.max(0,Math.min(191-S.len,t))))});
+$('#sel').addEventListener('keydown',e=>{const d={ArrowLeft:-1,ArrowRight:1,PageUp:-10,PageDown:10}[e.key];if(d){e.preventDefault();change(()=>S.start=Math.max(0,Math.min(191-S.len,S.start+d)))}});
+/* key edit */
+const sel=$('#keySel');NOTES.forEach(n=>['major','minor'].forEach(m=>sel.add(new Option(n+' '+m,n+'|'+m))));
+$('#keyEdit').onclick=()=>{sel.value=S.key.note+'|'+S.key.mode;sel.hidden=!sel.hidden;if(!sel.hidden)sel.focus()};
+sel.onchange=()=>{const [n,m]=sel.value.split('|');S.key={note:n,mode:m,user:true};sel.hidden=true;S.heard=false;renderAudio()};
+$('#bpmHalf').onclick=()=>{S.bpm=Math.round(S.bpm/2);renderAudio()};$('#bpmDbl').onclick=()=>{S.bpm=S.bpm*2;renderAudio()};
+let taps=[];$('#tap').onclick=()=>{const n=Date.now();taps=taps.filter(t=>n-t<2500);taps.push(n);if(taps.length>1){const avg=(taps[taps.length-1]-taps[0])/(taps.length-1);$('#tapOut').textContent=Math.round(60000/avg)+' BPM'}};
+/* export */
+function doExport(){toast(T('exported'))}
+$('#export').onclick=()=>{ if($('#export').getAttribute('aria-disabled')==='true')return;
+  if(builtCurrent()&&S.heard)return doExport();$('#gate').showModal();$('#gateBack').focus()};
+$('#gateBack').onclick=()=>{$('#gate').close();(S.built&&builtCurrent()?$('#srcSeg [data-src=adj]'):$('#build')).focus()};
+$('#gateGo').onclick=()=>{$('#gate').close();doExport()};
+/* settings */
+function renderSettings(){const c=$('#clip');c.textContent=S.clip?T('on'):T('off');c.setAttribute('aria-pressed',S.clip);$('#cVal').textContent=S.conc;$('#updOut').textContent=S.upd?T('updNone'):T('updNever')}
+$('#sEn').onclick=$('#lEn').onclick=()=>{S.lang='en';render()};$('#sTh').onclick=$('#lTh').onclick=()=>{S.lang='th';render()};
+$('#clip').onclick=()=>{S.clip=!S.clip;renderSettings()};$('#cMinus').onclick=()=>{S.conc=Math.max(1,S.conc-1);renderSettings()};$('#cPlus').onclick=()=>{S.conc=Math.min(5,S.conc+1);renderSettings()};
+$('#chk').onclick=()=>{S.upd=true;renderSettings()};
+$('#clear').onclick=()=>$('#confirmClear').showModal();$('#clearNo').onclick=()=>$('#confirmClear').close();$('#clearYes').onclick=()=>{$('#confirmClear').close();toast(T('cleared'))};
+/* nav + demo + open-in-audio */
+document.addEventListener('click',e=>{const n=e.target.closest('[data-page]');if(n){S.page=n.dataset.page;render();return}
+  const o=e.target.closest('[data-open]');if(o){S.page='au';render()}});
+$('#dEmpty').onclick=()=>{S.items=false;render()};$('#dItems').onclick=()=>{S.items=true;render()};
+$('#libQ').oninput=renderLib;
+$('#openLocal').onclick=()=>{S.page='au';render()};
+render();
+</script>
+</body>
+</html>

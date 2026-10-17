@@ -12,6 +12,7 @@ from src.ui.pages.settings import build_thumbnail_card
 
 class SettingsInterface(QWidget):
     themeChanged = pyqtSignal()
+    languageChanged = pyqtSignal(str)
     concurrencyChanged = pyqtSignal(int)
     updateAvailable = pyqtSignal(object)
 
@@ -32,7 +33,7 @@ class SettingsInterface(QWidget):
         layout.setSpacing(14)
         title = QLabel("Settings")
         title.setObjectName("PageTitle")
-        subtitle = QLabel("Set appearance, queue behavior, and update preferences.")
+        subtitle = QLabel("Set language, queue behavior, and manual update preferences.")
         subtitle.setObjectName("PageSubtitle")
         layout.addWidget(title)
         layout.addWidget(subtitle)
@@ -48,23 +49,19 @@ class SettingsInterface(QWidget):
         root.addWidget(scroll)
 
     def _appearance_card(self) -> QFrame:
-        card, layout = _settings_card("Appearance")
-        self.themeCombo = ComboBox()
-        self.themeCombo.addItems(["Dark", "Light"])
-        self.themeCombo.setMaximumWidth(260)
-        self.themeCombo.setCurrentText(self._cfg.get("theme", "dark").title())
-        self.themeCombo.currentTextChanged.connect(self._save_theme)
-        self.accentCombo = ComboBox()
-        self.accentCombo.setMaximumWidth(260)
-        accents = [("Blue", "#2563EB"), ("Teal", "#0F766E"), ("Violet", "#7C3AED"), ("Rose", "#BE123C")]
-        for name, color in accents:
-            self.accentCombo.addItem(name, color)
-        current = self._cfg.get("accentColor", "#2563EB")
-        index = next((i for i in range(self.accentCombo.count()) if self.accentCombo.itemData(i) == current), 0)
-        self.accentCombo.setCurrentIndex(index)
-        self.accentCombo.currentIndexChanged.connect(self._save_accent)
-        layout.addLayout(_row("Theme", self.themeCombo))
-        layout.addLayout(_row("Accent color", self.accentCombo))
+        card, layout = _settings_card("Language & Appearance")
+        self.languageCombo = ComboBox()
+        self.languageCombo.setMaximumWidth(260)
+        self.languageCombo.addItem("ไทย (Thai)", "th")
+        self.languageCombo.addItem("English", "en")
+        current = self._cfg.get("language", "th")
+        index = next((i for i in range(self.languageCombo.count()) if self.languageCombo.itemData(i) == current), 0)
+        self.languageCombo.setCurrentIndex(index)
+        self.languageCombo.currentIndexChanged.connect(self._save_language)
+        theme_label = QLabel("Dark Studio · Teal")
+        theme_label.setObjectName("MutedText")
+        layout.addLayout(_row("Interface language", self.languageCombo))
+        layout.addLayout(_row("Theme", theme_label))
         return card
 
     def _queue_card(self) -> QFrame:
@@ -93,13 +90,10 @@ class SettingsInterface(QWidget):
         layout.addLayout(_row("Continue in system tray", self.trayCheck))
         return card
 
-    def _save_theme(self, value: str) -> None:
-        self._save("theme", value.lower())
-        self.themeChanged.emit()
-
-    def _save_accent(self) -> None:
-        self._save("accentColor", self.accentCombo.currentData())
-        self.themeChanged.emit()
+    def _save_language(self) -> None:
+        lang = str(self.languageCombo.currentData() or "th")
+        self._save("language", lang)
+        self.languageChanged.emit(lang)
 
     def _save_concurrency(self, value: int) -> None:
         self._save("maxConcurrentDownloads", value)
