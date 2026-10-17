@@ -8,7 +8,7 @@ import tempfile
 from PyQt6.QtCore import QThreadPool, pyqtSignal
 from PyQt6.QtWidgets import QWidget
 
-from src.services.audio_analysis import camelot_code, transpose_key
+from src.services.audio_analysis import camelot_code, enharmonic_key, transpose_key
 from src.services.audio_pitch import build_export_filename, unique_export_path
 from src.services.platform_actions import open_parent, open_path
 from src.ui.dialogs import get_open_file_path
@@ -70,8 +70,8 @@ class AudioToolsInterface(QWidget):
 
     def _update_preview_labels(self, *_args) -> None:
         base_key, semitones = self.detectedKeyCombo.currentText() or "C major", self.semitoneSpin.value()
-        shifted_key = transpose_key(base_key, semitones)
-        self.camelotLabel.setText(f"Camelot: {camelot_code(base_key)}")
+        shifted_key, enh = transpose_key(base_key, semitones), enharmonic_key(base_key)
+        self.camelotLabel.setText(f"Camelot: {camelot_code(base_key)}" + (f" ({enh})" if enh != base_key else ""))
         sign = f"+{semitones}" if semitones > 0 else str(semitones)
         self.resultingKeyLabel.setText(f"Resulting key: {shifted_key} ({camelot_code(shifted_key)}) · {sign} st")
         if self._source:
@@ -142,7 +142,8 @@ class AudioToolsInterface(QWidget):
 
 
 def _format_analysis_status(key: str, bpm: float, result: dict) -> str:
-    alts = [f"{c['key']} ({camelot_code(c['key'])})" for c in result.get("key_candidates", [])[1:3]]
-    alt_txt = f" · Alt: {', '.join(alts)}" if alts else ""
-    return f"Estimated {key} ({camelot_code(key)}){alt_txt} · {bpm:.1f} BPM"
+    enh = enharmonic_key(key)
+    k_txt = f"{key} / {enh}" if enh != key else key
+    alts = ", ".join(f"{c['key']} ({camelot_code(c['key'])})" for c in result.get("key_candidates", [])[1:3])
+    return f"Estimated {k_txt} ({camelot_code(key)})" + (f" · Alt: {alts}" if alts else "") + f" · {bpm:.1f} BPM"
 

@@ -12,7 +12,7 @@ import pytest
 
 from src.core.config import Config
 from src.core.updater import UpdateManager
-from src.services.audio_analysis import analyze_audio_file, camelot_code, transpose_key
+from src.services.audio_analysis import analyze_audio_file, camelot_code, enharmonic_key, transpose_key
 from src.services.audio_pitch import (
     build_export_filename,
     render_pitch_shift,
@@ -58,6 +58,8 @@ def test_key_transposition_and_camelot_codes():
     assert camelot_code("C major") == "8B"
     assert camelot_code("A minor") == "8A"
     assert camelot_code("F minor") == "4A"
+    assert camelot_code("Eb minor") == "2A"
+    assert enharmonic_key("D# minor") == "Eb minor"
     shifted = transpose_key("F minor", -2)
     assert shifted == "D# minor"
     assert camelot_code(shifted) == "2A"

@@ -1,0 +1,121 @@
+"""DSP routines for Hann harmonic chroma key extraction and multi-band spectral flux BPM."""
+
+from __future__ import annotations
+
+import math
+
+_FLUX_FREQS = (75.0, 130.0, 220.0, 380.0, 660.0, 1150.0, 2000.0, 3400.0)
+
+
+def compute_chroma(samples: list[float], sr: int) -> list[float]:
+    win = min(4096, len(samples))
+    hann = [0.5 - 0.5 * math.cos(2.0 * math.pi * i / max(1, win - 1)) for i in range(win)]
+    stride = max(win, len(samples) // 60)
+    coeffs = [(m % 12, 2.0 * math.cos(2.0 * math.pi * (440.0 * (2.0 ** ((m - 69) / 12.0))) / sr)) for m in range(53, 89)]
+    chroma = [0.0] * 12
+    for start in range(0, len(samples) - win + 1, stride):
+        f_ch = _frame_pitch_energy([samples[start + i] * hann[i] for i in range(win)], coeffs)
+        mean_e = sum(f_ch) / 12.0
+        whitened = [max(0.0, v - 0.9 * mean_e) for v in f_ch]
+        peak = max(whitened, default=0.0)
+        if peak > 1e-6:
+            for pc in range(12):
+                chroma[pc] += whitened[pc] / peak
+    mx = max(chroma, default=1.0) or 1.0
+    return [v / mx for v in chroma]
+
+
+def _frame_pitch_energy(frame: list[float], coeffs: list[tuple[int, float]]) -> list[float]:
+    f_ch = [0.0] * 12
+    for pc, coeff in coeffs:
+        s1, s2 = 0.0, 0.0
+        for x in frame:
+            s0 = x + coeff * s1 - s2
+            s2, s1 = s1, s0
+        f_ch[pc] += math.log1p(20.0 * math.sqrt(max(0.0, s1 * s1 + s2 * s2 - coeff * s1 * s2)))
+    return f_ch
+
+
+def estimate_bpm(samples: list[float], sr: int) -> float:
+    win, hop = 256, 128
+    fps = sr / float(hop)
+    onset = _spectral_flux_onset(samples, sr, win, hop)
+    n_frames = len(onset)
+    if n_frames < 80:
+        return 120.0
+    win_len = min(n_frames, int(round(12.0 * fps)))
+    win_hop = max(1, int(round(4.0 * fps)))
+    windows = [onset[s : s + win_len] for s in range(0, max(1, n_frames - win_len + 1), win_hop)]
+    scores: dict[int, float] = {b: 0.0 for b in range(66, 180)}
+    for w in windows:
+        _accumulate_window_bpm(w, fps, scores)
+    ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    best_bpm = ranked[0][0]
+    half_b = int(round(best_bpm / 2.0))
+    if 72 <= half_b <= 95 and scores.get(half_b, 0.0) >= ranked[0][1] * 0.88:
+        best_bpm = half_b
+    return float(best_bpm)
+
+
+def _spectral_flux_onset(samples: list[float], sr: int, win: int, hop: int) -> list[float]:
+    n_frames = (len(samples) - win) // hop
+    if n_frames <= 0:
+        return []
+    coeffs = [2.0 * math.cos(2.0 * math.pi * f / sr) for f in _FLUX_FREQS]
+    prev_lp = [0.0] * len(coeffs)
+    flux = [0.0] * n_frames
+    for f_idx in range(n_frames):
+        frame = samples[f_idx * hop : f_idx * hop + win]
+        total = 0.0
+        for b_idx, c in enumerate(coeffs):
+            s1, s2 = 0.0, 0.0
+            for x in frame:
+                s0 = x + c * s1 - s2
+                s2, s1 = s1, s0
+            lp = math.log1p(100.0 * math.sqrt(max(0.0, s1 * s1 + s2 * s2 - c * s1 * s2) / win))
+            if lp > prev_lp[b_idx]:
+                total += lp - prev_lp[b_idx]
+            prev_lp[b_idx] = lp
+        flux[f_idx] = total
+    return _sharpen_onset(flux, max(3, int(round(0.15 * sr / hop))))
+
+
+def _sharpen_onset(flux: list[float], hw: int) -> list[float]:
+    n = len(flux)
+    ps = [0.0] * (n + 1)
+    for i in range(n):
+        ps[i + 1] = ps[i] + flux[i]
+    return [
+        max(0.0, flux[i] - (ps[min(n, i + hw + 1)] - ps[max(0, i - hw)]) / max(1, min(n, i + hw + 1) - max(0, i - hw)))
+        for i in range(n)
+    ]
+
+
+def _accumulate_window_bpm(w: list[float], fps: float, scores: dict[int, float]) -> None:
+    wn = len(w)
+    norm = math.sqrt(sum(x * x for x in w) / max(1, wn))
+    if norm < 1e-4:
+        return
+    wnorm = [x / norm for x in w]
+    max_lag = min(wn - 2, int(fps * 60.0 * 4.0 / 65.0) + 4)
+    acf = [0.0] * (max_lag + 1)
+    for lag in range(15, max_lag + 1):
+        acf[lag] = sum(wnorm[i] * wnorm[i - lag] for i in range(lag, wn)) / (wn - lag)
+    for bpm in range(66, 180):
+        lag = fps * 60.0 / bpm
+        sc = (
+            1.0 * _interp(acf, lag, max_lag)
+            + 0.55 * _interp(acf, lag * 2.0, max_lag)
+            + 0.35 * _interp(acf, lag * 4.0, max_lag)
+            + 0.20 * _interp(acf, lag * 3.0, max_lag)
+        )
+        prior = math.exp(-0.5 * ((math.log2(bpm / 102.0)) / 0.50) ** 2)
+        scores[bpm] += sc * (0.80 + 0.20 * prior)
+
+
+def _interp(acf: list[float], lag_f: float, max_lag: int) -> float:
+    idx = int(lag_f)
+    if idx < 15 or idx >= max_lag:
+        return 0.0
+    frac = lag_f - idx
+    return acf[idx] * (1.0 - frac) + acf[idx + 1] * frac
