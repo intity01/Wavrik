@@ -12,7 +12,14 @@ import pytest
 
 from src.core.config import Config
 from src.core.updater import UpdateManager
-from src.services.audio_analysis import analyze_audio_file, camelot_code, enharmonic_key, transpose_key
+from src.services.audio_analysis import (
+    analyze_audio_file,
+    camelot_code,
+    enharmonic_key,
+    mirex_bpm_score,
+    mirex_key_score,
+    transpose_key,
+)
 from src.services.audio_pitch import (
     build_export_filename,
     render_pitch_shift,
@@ -63,6 +70,12 @@ def test_key_transposition_and_camelot_codes():
     shifted = transpose_key("F minor", -2)
     assert shifted == "D# minor"
     assert camelot_code(shifted) == "2A"
+    assert mirex_key_score("Eb minor", "D# minor") == (1.0, "exact")
+    assert mirex_key_score("G major", "C major") == (0.5, "fifth")
+    assert mirex_key_score("A minor", "C major") == (0.3, "relative")
+    assert mirex_key_score("F minor", "F major") == (0.2, "parallel")
+    assert mirex_bpm_score(80.0, 80.0) == (1.0, "acc1_exact")
+    assert mirex_bpm_score(160.0, 80.0) == (0.5, "acc2_harmonic")
 
 
 def test_analyze_audio_file_estimates_key_and_bpm(tmp_path: Path):
@@ -70,6 +83,7 @@ def test_analyze_audio_file_estimates_key_and_bpm(tmp_path: Path):
     result = analyze_audio_file(wav_path, max_seconds=6)
     assert result["status"] == "estimate"
     assert "Experimental / Estimate" in result["badge"]
+    assert 50 <= int(result["confidence"]) <= 99
     assert result["key"] in {"C major", "A minor", "G major", "F major", "E minor"}
     assert 110.0 <= float(result["bpm"]) <= 130.0
     assert len(result["key_candidates"]) == 3
