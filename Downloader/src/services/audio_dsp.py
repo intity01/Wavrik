@@ -50,10 +50,15 @@ def estimate_bpm(samples: list[float], sr: int) -> float:
     for w in windows:
         _accumulate_window_bpm(w, fps, scores)
     ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    best_bpm = ranked[0][0]
+    best_bpm, top_sc = ranked[0]
     half_b = int(round(best_bpm / 2.0))
-    if 72 <= half_b <= 95 and scores.get(half_b, 0.0) >= ranked[0][1] * 0.88:
-        best_bpm = half_b
+    if 72 <= half_b <= 95 and scores.get(half_b, 0.0) >= top_sc * 0.88:
+        return float(half_b)
+    t_cands = [b for b in (int(best_bpm * 0.75), int(best_bpm * 0.75) + 1) if 75 <= b <= 92]
+    if t_cands:
+        sub_b = max(t_cands, key=lambda b: scores.get(b, 0.0))
+        if scores.get(sub_b, 0.0) >= top_sc * 0.91:
+            best_bpm = sub_b
     return float(best_bpm)
 
 
