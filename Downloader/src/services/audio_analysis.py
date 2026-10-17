@@ -1,4 +1,4 @@
-"""CPU key and BPM estimation with Krumhansl-Schmuckler pitch profiles."""
+"""CPU key and BPM estimation with Hann-windowed harmonic chroma and comb tempo."""
 
 from __future__ import annotations
 
@@ -14,17 +14,11 @@ from src.core.runtime import find_ffmpeg
 NOTES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 ALL_KEYS = tuple([*(f"{n} major" for n in NOTES), *(f"{n} minor" for n in NOTES)])
 _PROFILES = {
-    "major": (6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88),
-    "minor": (6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17),
+    "major": (1.20, 0.00, 0.45, 0.05, 0.65, 0.45, 0.00, 0.80, 0.05, 0.40, 0.10, 0.35),
+    "minor": (1.15, 0.00, 0.40, 0.65, 0.05, 0.45, 0.00, 0.80, 0.45, 0.05, 0.35, 0.10),
 }
-_CAMELOT_MAJOR = {
-    "B": "1B", "F#": "2B", "C#": "3B", "G#": "4B", "D#": "5B", "A#": "6B",
-    "F": "7B", "C": "8B", "G": "9B", "D": "10B", "A": "11B", "E": "12B",
-}
-_CAMELOT_MINOR = {
-    "G#": "1A", "D#": "2A", "A#": "3A", "F": "4A", "C": "5A", "G": "6A",
-    "D": "7A", "A": "8A", "E": "9A", "B": "10A", "F#": "11A", "C#": "12A",
-}
+_CAMELOT_MAJOR = {"B": "1B", "F#": "2B", "C#": "3B", "G#": "4B", "D#": "5B", "A#": "6B", "F": "7B", "C": "8B", "G": "9B", "D": "10B", "A": "11B", "E": "12B"}
+_CAMELOT_MINOR = {"G#": "1A", "D#": "2A", "A#": "3A", "F": "4A", "C": "5A", "G": "6A", "D": "7A", "A": "8A", "E": "9A", "B": "10A", "F#": "11A", "C#": "12A"}
 
 
 def camelot_code(key_name: str) -> str:
@@ -38,22 +32,20 @@ def transpose_key(key_name: str, semitones: int) -> str:
     parts = key_name.strip().split()
     if len(parts) != 2 or parts[0] not in NOTES:
         return key_name
-    idx = (NOTES.index(parts[0]) + int(semitones)) % 12
-    return f"{NOTES[idx]} {parts[1]}"
+    return f"{NOTES[(NOTES.index(parts[0]) + int(semitones)) % 12]} {parts[1]}"
 
 
-def analyze_audio_file(path: str | Path, max_seconds: int = 35) -> dict:
+def analyze_audio_file(path: str | Path, max_seconds: int = 135) -> dict:
     samples, sr = _decode_mono_samples(Path(path), max_seconds)
     if len(samples) < sr // 2 or max((abs(x) for x in samples), default=0.0) < 1e-5:
         return {"key": "C major", "camelot": "8B", "bpm": 120.0, "status": "unavailable", "key_candidates": []}
-    chroma = _compute_chroma(samples, sr)
-    candidates = _rank_keys(chroma)
+    body = samples[15 * sr :] if len(samples) > 45 * sr else samples
+    candidates = _rank_keys(_compute_chroma(body, sr))
     top_key = candidates[0]["key"]
-    bpm = _estimate_bpm(samples, sr)
     return {
         "key": top_key,
         "camelot": camelot_code(top_key),
-        "bpm": bpm,
+        "bpm": _estimate_bpm(body, sr),
         "status": "estimate",
         "badge": "Experimental / Estimate · ทดลอง / ค่าประมาณ",
         "key_candidates": candidates[:3],
@@ -68,7 +60,7 @@ def _decode_mono_samples(path: Path, max_seconds: int) -> tuple[list[float], int
     if exe and Path(exe).is_file():
         cmd = [exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-i", str(path), "-t", str(max_seconds), "-vn", "-ac", "1", "-ar", "11025", "-f", "s16le", "pipe:1"]
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
-        proc = subprocess.run(cmd, capture_output=True, timeout=30, check=False, creationflags=flags)
+        proc = subprocess.run(cmd, capture_output=True, timeout=45, check=False, creationflags=flags)
         if proc.returncode == 0 and proc.stdout:
             pcm = array("h")
             pcm.frombytes(proc.stdout[: (len(proc.stdout) // 2) * 2])
@@ -84,57 +76,69 @@ def _read_wav_fallback(path: Path, max_seconds: int) -> tuple[list[float], int]:
         return [], 11025
     pcm = array("h")
     pcm.frombytes(raw[: (len(raw) // 2) * 2])
-    step = max(1, ch)
-    return [pcm[i] / 32768.0 for i in range(0, len(pcm), step)], sr
+    return [pcm[i] / 32768.0 for i in range(0, len(pcm), max(1, ch))], sr
 
 
 def _compute_chroma(samples: list[float], sr: int) -> list[float]:
+    win = min(4096, len(samples))
+    hann = [0.5 - 0.5 * math.cos(2.0 * math.pi * i / max(1, win - 1)) for i in range(win)]
+    stride = max(win, len(samples) // 60)
+    coeffs = [(m % 12, 2.0 * math.cos(2.0 * math.pi * (440.0 * (2.0 ** ((m - 69) / 12.0))) / sr)) for m in range(53, 89)]
     chroma = [0.0] * 12
-    win = min(2048, len(samples))
-    stride = max(win, len(samples) // 20)
-    for midi in range(36, 84):
-        freq = 440.0 * (2.0 ** ((midi - 69) / 12.0))
-        coeff = 2.0 * math.cos(2.0 * math.pi * freq / sr)
-        energy = 0.0
-        for start in range(0, len(samples) - win + 1, stride):
-            s1, s2 = 0.0, 0.0
-            for x in samples[start : start + win]:
-                s0 = x + coeff * s1 - s2
-                s2, s1 = s1, s0
-            energy += s1 * s1 + s2 * s2 - coeff * s1 * s2
-        chroma[midi % 12] += max(0.0, energy)
-    return chroma
+    for start in range(0, len(samples) - win + 1, stride):
+        f_ch = _frame_pitch_energy([samples[start + i] * hann[i] for i in range(win)], coeffs)
+        mean_e = sum(f_ch) / 12.0
+        whitened = [max(0.0, v - 0.9 * mean_e) for v in f_ch]
+        peak = max(whitened, default=0.0)
+        if peak > 1e-6:
+            for pc in range(12):
+                chroma[pc] += whitened[pc] / peak
+    mx = max(chroma, default=1.0) or 1.0
+    return [v / mx for v in chroma]
+
+
+def _frame_pitch_energy(frame: list[float], coeffs: list[tuple[int, float]]) -> list[float]:
+    f_ch = [0.0] * 12
+    for pc, coeff in coeffs:
+        s1, s2 = 0.0, 0.0
+        for x in frame:
+            s0 = x + coeff * s1 - s2
+            s2, s1 = s1, s0
+        f_ch[pc] += math.log1p(20.0 * math.sqrt(max(0.0, s1 * s1 + s2 * s2 - coeff * s1 * s2)))
+    return f_ch
 
 
 def _rank_keys(chroma: list[float]) -> list[dict]:
     ranked: list[dict] = []
     for mode, profile in _PROFILES.items():
         for tonic in range(12):
-            rotated = profile[-tonic:] + profile[:-tonic] if tonic else profile
-            score = _pearson(chroma, rotated)
-            ranked.append({"key": f"{NOTES[tonic]} {mode}", "correlation": round(score, 4)})
+            rot = profile[-tonic:] + profile[:-tonic] if tonic else profile
+            ranked.append({"key": f"{NOTES[tonic]} {mode}", "correlation": round(sum(chroma[i] * rot[i] for i in range(12)), 4)})
     ranked.sort(key=lambda item: item["correlation"], reverse=True)
     return ranked
 
 
-def _pearson(xs: list[float], ys: tuple[float, ...]) -> float:
-    mx, my = sum(xs) / 12.0, sum(ys) / 12.0
-    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
-    den = math.sqrt(sum((x - mx) ** 2 for x in xs) * sum((y - my) ** 2 for y in ys))
-    return num / den if den > 1e-12 else 0.0
-
-
 def _estimate_bpm(samples: list[float], sr: int) -> float:
-    hop = max(64, sr // 86)
+    hop = max(32, sr // 172)
     env = [sum(abs(x) for x in samples[i : i + hop]) for i in range(0, len(samples) - hop, hop)]
     onset = [max(0.0, env[i + 1] - env[i]) for i in range(len(env) - 1)]
-    if len(onset) < 60:
+    if len(onset) < 80:
         return 120.0
     fps = sr / float(hop)
-    min_lag, max_lag = max(1, int(fps * 60.0 / 175.0)), min(len(onset) // 2, int(fps * 60.0 / 68.0))
-    best_lag, best_score = min_lag, -1.0
-    for lag in range(min_lag, max(min_lag + 1, max_lag + 1)):
-        score = sum(onset[i] * onset[i - lag] for i in range(lag, len(onset)))
-        if score > best_score:
-            best_lag, best_score = lag, score
-    return round(60.0 * fps / best_lag, 1) if best_lag > 0 else 120.0
+    best_bpm, best_score = 120.0, -1.0
+    for bpm_x2 in range(140, 350):
+        bpm = bpm_x2 / 2.0
+        prior = math.exp(-0.5 * ((math.log2(bpm / 120.0)) / 0.45) ** 2)
+        weighted = _comb_score(onset, fps, bpm) * (0.85 + 0.15 * prior)
+        if weighted > best_score:
+            best_score, best_bpm = weighted, round(fps * 60.0 / max(1, int(round(fps * 60.0 / bpm))))
+    return float(best_bpm)
+
+
+def _comb_score(onset: list[float], fps: float, bpm: float) -> float:
+    total = 0.0
+    for mult, weight in ((1, 1.0), (2, 0.5), (4, 0.25)):
+        lag = int(round(fps * 60.0 * mult / bpm))
+        if 0 < lag < len(onset):
+            total += weight * (sum(onset[i] * onset[i - lag] for i in range(lag, len(onset), 2)) / ((len(onset) - lag) // 2 + 1))
+    return total

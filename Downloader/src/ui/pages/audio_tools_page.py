@@ -66,7 +66,7 @@ class AudioToolsInterface(QWidget):
         self.detectedKeyCombo.setCurrentText(key)
         self.bpmSpin.setValue(bpm)
         self._update_preview_labels()
-        self.statusLabel.setText(f"Estimated {key} ({camelot_code(key)}) · {bpm:.1f} BPM")
+        self.statusLabel.setText(_format_analysis_status(key, bpm, result))
 
     def _update_preview_labels(self, *_args) -> None:
         base_key, semitones = self.detectedKeyCombo.currentText() or "C major", self.semitoneSpin.value()
@@ -139,3 +139,10 @@ class AudioToolsInterface(QWidget):
     def _set_controls_enabled(self, enabled: bool) -> None:
         for widget in (self.reanalyzeBtn, self.previewOrigBtn, self.previewShiftedBtn, self.exportBtn):
             widget.setEnabled(enabled)
+
+
+def _format_analysis_status(key: str, bpm: float, result: dict) -> str:
+    alts = [f"{c['key']} ({camelot_code(c['key'])})" for c in result.get("key_candidates", [])[1:3]]
+    alt_txt = f" · Alt: {', '.join(alts)}" if alts else ""
+    return f"Estimated {key} ({camelot_code(key)}){alt_txt} · {bpm:.1f} BPM"
+
