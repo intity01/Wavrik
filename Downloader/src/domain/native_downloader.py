@@ -42,7 +42,10 @@ class NativeDownloader:
 
     def cancel(self) -> None:
         if self._process and self._process.poll() is None:
-            self._process.terminate()
+            try:
+                self._process.terminate()
+            except OSError:
+                pass
 
     def download(
         self,
@@ -60,6 +63,8 @@ class NativeDownloader:
         return download_file(self._cancel, requests.get, url, output_dir, preset, progress)
 
     def _download_manifest(self, url, output_dir, preset, progress) -> DownloadResult:
+        if self._cancel.is_set():
+            return DownloadResult(False, JobState.CANCELLED, engine="native")
         executable = _ffmpeg_executable()
         if not executable:
             return DownloadResult(False, JobState.FAILED, error="FFmpeg is required for HLS or DASH downloads. Add ffmpeg.exe beside RunApp.bat.", engine="native")

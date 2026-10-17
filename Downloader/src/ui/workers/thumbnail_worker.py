@@ -19,6 +19,7 @@ class ThumbnailWorker(QRunnable):
 
     @pyqtSlot()
     def run(self) -> None:
+        response = None
         try:
             response = requests.get(self.image_url, timeout=(5, 10), stream=True)
             response.raise_for_status()
@@ -37,3 +38,6 @@ class ThumbnailWorker(QRunnable):
                 self.signals.thumbnailReady.emit(self.url, image)
         except requests.RequestException:
             return
+        finally:
+            if response is not None and hasattr(response, "close"):
+                response.close()

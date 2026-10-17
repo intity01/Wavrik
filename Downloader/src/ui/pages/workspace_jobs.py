@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from src.domain.models import DownloadJobConfig
@@ -34,7 +35,7 @@ def startDownload(page, url: str, preset_key: str, engine: str = "auto") -> None
         output_dir = page._cfg.getDownloadPath(preset.media_type)
         output_dir_obj = Path(output_dir)
         output_dir_obj.mkdir(parents=True, exist_ok=True)
-        test_file = output_dir_obj / ".write_test"
+        test_file = output_dir_obj / f".write_test_{time.monotonic_ns()}"
         test_file.touch()
         test_file.unlink()
     except OSError:

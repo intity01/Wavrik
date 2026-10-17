@@ -22,11 +22,17 @@ class BatchAudioWorker(QRunnable):
         self._cfg = cfg
         self._signals = signals
         self._keys = keys or {}
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        self._cancelled = True
 
     def run(self) -> None:
         total = len(self._sources)
         succeeded, failed = 0, 0
         for idx, src in enumerate(self._sources):
+            if self._cancelled:
+                break
             try:
                 known_key = self._keys.get(str(src), "C major")
                 process_batch_file(src, self._cfg, known_key)

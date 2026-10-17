@@ -20,8 +20,9 @@ def download(
 ) -> DownloadResult:
     started = time.time()
     hook = owner._progress_hook(progress_callback)
+    post_hook = owner._postprocessor_hook() if hasattr(owner, "_postprocessor_hook") else None
     settings = YtDownloadSettings.from_config(owner.config)
-    options = buildOptions(output_dir, preset, hook, settings)
+    options = buildOptions(output_dir, preset, hook, settings, post_hook)
     ctx = AttemptContext(output_dir, preset, options, started, settings)
     for attempt in range(3):
         result = _attempt(owner, url, attempt, 3, ctx)

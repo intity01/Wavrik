@@ -72,7 +72,8 @@ class MediaDownloader:
         progress_callback: Callable | None = None, engine: str = "auto",
     ) -> DownloadResult:
         selected = engine if engine in {"auto", "native", "yt-dlp"} else "auto"
-        if preset.media_type.value == "audio" and preset.container == "all":
+        is_audio = getattr(preset.media_type, "value", preset.media_type) == "audio"
+        if is_audio and preset.container == "all":
             return self._download_all_audio_formats(url, output_dir, preset, progress_callback, selected)
         if selected == "native" or (selected == "auto" and native_kind(url)):
             self._native = NativeDownloader(self._cancel, self.logger)
@@ -97,6 +98,13 @@ class MediaDownloader:
                 raise DownloadCancelled()
             if callback:
                 self._report_progress(callback, data)
+
+        return hook
+
+    def _postprocessor_hook(self) -> Callable:
+        def hook(data: dict) -> None:
+            if self._cancel.is_set():
+                raise DownloadCancelled()
 
         return hook
 

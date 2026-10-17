@@ -46,9 +46,12 @@ class YtDownloadSettings:
         )
 
 
-def buildOptions(output_dir: Path, preset: DownloadPreset, progress_hook: Callable, settings: YtDownloadSettings) -> dict:
+def buildOptions(
+    output_dir: Path, preset: DownloadPreset, progress_hook: Callable,
+    settings: YtDownloadSettings, postprocessor_hook: Callable | None = None,
+) -> dict:
     output_dir.mkdir(parents=True, exist_ok=True)
-    options = _base_options(output_dir, preset, progress_hook, settings)
+    options = _base_options(output_dir, preset, progress_hook, settings, postprocessor_hook)
     apply_rate_limit_protection(options, settings)
     apply_thumbnail_options(options, output_dir, settings)
     _apply_runtime_options(options, settings)
@@ -64,8 +67,11 @@ def metadataOptions(cookie_file: str = "", flat: bool = False, socket_timeout: i
     return options
 
 
-def _base_options(output_dir: Path, preset: DownloadPreset, hook: Callable, settings: YtDownloadSettings) -> dict:
-    return {
+def _base_options(
+    output_dir: Path, preset: DownloadPreset, hook: Callable,
+    settings: YtDownloadSettings, postprocessor_hook: Callable | None = None,
+) -> dict:
+    options = {
         "format": format_selector(preset),
         "outtmpl": str(output_dir / (template(settings.rename_pattern) + ".%(ext)s")),
         "progress_hooks": [hook], "quiet": True, "no_warnings": True,
@@ -77,6 +83,9 @@ def _base_options(output_dir: Path, preset: DownloadPreset, hook: Callable, sett
         "skip_unavailable_fragments": False, "ignoreerrors": True,
         "nooverwrites": preset.container != "all",
     }
+    if postprocessor_hook:
+        options["postprocessor_hooks"] = [postprocessor_hook]
+    return options
 
 
 def _apply_runtime_options(options: dict, settings: YtDownloadSettings) -> None:

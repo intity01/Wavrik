@@ -58,7 +58,6 @@ def _stream(cancel, response, temporary: Path, total: int, progress: Callable | 
     with temporary.open("wb") as handle:
         for chunk in response.iter_content(256 * 1024):
             if cancel.is_set():
-                temporary.unlink(missing_ok=True)
                 raise _CancelledDownload()
             if not chunk:
                 continue
