@@ -7,9 +7,14 @@ def build(tokens: dict[str, str], accent: str) -> str:
     return f"""
     QMainWindow, QWidget#AppRoot, QStackedWidget {{ background: {tokens['bg']}; color: {tokens['text']}; }}
     QWidget {{ color: {tokens['text']}; font-family: "Inter", "Segoe UI", ".SF Pro Text"; font-size: 10pt; }}
-    QLabel#PageTitle {{ font-size: 20pt; font-weight: 700; color: {tokens['text']}; letter-spacing: -0.5px; }}
+    QLabel#BrandTitle {{ font-size: 14pt; font-weight: 800; color: {accent}; letter-spacing: 0.5px; }}
+    QLabel#BrandSubtitle {{ font-size: 8.5pt; color: {tokens['text_muted']}; }}
+    QLabel#NavCategoryLabel {{ font-size: 8pt; font-weight: 700; color: {tokens['text_subtle']}; padding-left: 8px; padding-top: 8px; }}
+    QLabel#PageTitle {{ font-size: 19pt; font-weight: 700; color: {tokens['text']}; letter-spacing: -0.4px; }}
     QLabel#PageSubtitle, QLabel#MutedText {{ color: {tokens['text_muted']}; }}
-    QLabel#SectionTitle {{ font-size: 11pt; font-weight: 700; color: {tokens['text']}; letter-spacing: -0.3px; }}
+    QLabel#SectionTitle {{ font-size: 11pt; font-weight: 700; color: {tokens['text']}; letter-spacing: -0.2px; }}
+    QLabel#SectionDesc {{ font-size: 9pt; color: {tokens['text_muted']}; }}
+    QLabel#CategoryPill {{ font-size: 8pt; font-weight: 700; color: {accent}; background: #122B28; border: 1px solid #1E4E48; border-radius: 5px; padding: 2px 7px; }}
     QLabel#InlineError {{ color: {tokens['danger']}; font-size: 9pt; }}
     QLabel#SuccessText {{ color: {tokens['success']}; }}
     QLabel#WarningText {{ color: {tokens['warning']}; }}

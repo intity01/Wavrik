@@ -14,9 +14,9 @@ def build_ui(page) -> None:
     scroll, content = SmoothScrollArea(), QWidget()
     scroll.setWidgetResizable(True)
     layout = QVBoxLayout(content)
-    layout.setContentsMargins(24, 22, 24, 22)
-    layout.setSpacing(14)
-    for w in (QLabel("Audio Tools", objectName="PageTitle"), QLabel("Estimate Key & BPM, shift pitch & tempo with Rubber Band R3, and export safely.", objectName="PageSubtitle"), _source_card(page), _analysis_card(page), _pitch_card(page), _export_card(page)):
+    layout.setContentsMargins(24, 20, 24, 20)
+    layout.setSpacing(12)
+    for w in (QLabel("Audio Tools · สตูดิโอวิเคราะห์และปรับคีย์/ความเร็ว", objectName="PageTitle"), QLabel("ทำงาน 4 ขั้นตอน: (1) เลือกไฟล์ -> (2) วิเคราะห์ Key/BPM -> (3) ปรับแต่งด้วย Rubber Band R3 -> (4) ฟังเทียบและส่งออก", objectName="PageSubtitle"), _source_card(page), _analysis_card(page), _pitch_card(page), _export_card(page)):
         layout.addWidget(w)
     layout.addStretch(1)
     scroll.setWidget(content)
@@ -24,7 +24,7 @@ def build_ui(page) -> None:
 
 
 def _source_card(page) -> QFrame:
-    card, layout = _card("Source Audio")
+    card, layout = _card("STEP 1 · SOURCE", "1. ไฟล์เสียงต้นฉบับ (Source Audio)", "เลือกไฟล์เสียงในเครื่อง (.wav, .mp3, .flac, .m4a) หรือส่งต่อจาก Library (ไฟล์เดิมปลอดภัย)")
     row = QHBoxLayout()
     page.fileLabel = QLabel("No audio file loaded. Choose a local file or send one from Library.", objectName="MutedText")
     page.fileLabel.setWordWrap(True)
@@ -37,11 +37,10 @@ def _source_card(page) -> QFrame:
 
 
 def _analysis_card(page) -> QFrame:
-    card, layout = _card("Key, Section Modulation & BPM Analysis")
-    page.badgeLabel = QLabel("Experimental / Estimate · ทดลอง / ค่าประมาณ", objectName="ExperimentalBadge")
-    page.sectionKeyLabel = QLabel("Section Key: -- (1st Half vs 2nd Half)", objectName="MutedText")
-    layout.addWidget(page.badgeLabel)
-    layout.addWidget(page.sectionKeyLabel)
+    card, layout = _card("STEP 2 · HARMONIC ANALYSIS", "2. วิเคราะห์คีย์เพลง รหัส Camelot และจังหวะ (Key & BPM)", "วิเคราะห์ด้วย HPCP + MIREX: แสดงคีย์หลัก, Camelot Code (จับคู่คีย์เพลง), คีย์ทางเลือก 3 อันดับ และตรวจจับการเปลี่ยนคีย์")
+    page.badgeLabel, page.sectionKeyLabel = QLabel("Experimental / Estimate · ทดลอง / ค่าประมาณ", objectName="ExperimentalBadge"), QLabel("Section Key: -- (1st Half vs 2nd Half)", objectName="MutedText")
+    for w in (page.badgeLabel, page.sectionKeyLabel):
+        layout.addWidget(w)
     key_row = QHBoxLayout()
     page.detectedKeyCombo, page.camelotLabel, page.reanalyzeBtn = ComboBox(), QLabel("Camelot: 8B", objectName="StepBadge"), ToolButton("Re-analyze")
     page.detectedKeyCombo.addItems(list(ALL_KEYS))
@@ -71,10 +70,7 @@ def _bpm_row(page) -> QHBoxLayout:
     row = QHBoxLayout()
     page.bpmSpin, page.targetBpmSpin = QDoubleSpinBox(), QDoubleSpinBox()
     for sp in (page.bpmSpin, page.targetBpmSpin):
-        sp.setRange(30.0, 300.0)
-        sp.setDecimals(1)
-        sp.setSingleStep(0.5)
-        sp.setValue(120.0)
+        sp.setRange(30.0, 300.0) or sp.setDecimals(1) or sp.setSingleStep(0.5) or sp.setValue(120.0)
     page.bpmSpin.valueChanged.connect(page._on_source_bpm_changed)
     page.targetBpmSpin.valueChanged.connect(page._update_preview_labels)
     page.halfBpmBtn, page.doubleBpmBtn, page.resetTempoBtn = ToolButton("0.5x BPM"), ToolButton("2x BPM"), ToolButton("1.0x Tempo")
@@ -89,7 +85,7 @@ def _bpm_row(page) -> QHBoxLayout:
 
 
 def _pitch_card(page) -> QFrame:
-    card, layout = _card("Pitch Shift & Engine (-12 to +12 Semitones)")
+    card, layout = _card("STEP 3 · PITCH & TEMPO", "3. ปรับคีย์เสียงและความเร็วเพลง (Pitch Shift & Time-Stretch)", "ปรับคีย์ขึ้น/ลง (-12..+12 Semitones) โดยความเร็วไม่เปลี่ยน และยืด/หดความเร็ว (Target BPM 0.5x–2.0x) โดยคีย์ไม่เพี้ยน")
     shift_row = QHBoxLayout()
     page.semitoneSpin = QSpinBox(minimum=-12, maximum=12, value=0)
     page.semitoneSpin.valueChanged.connect(page._update_preview_labels)
@@ -110,8 +106,8 @@ def _pitch_card(page) -> QFrame:
 def _engine_row(page) -> QHBoxLayout:
     row = QHBoxLayout()
     page.engineCombo, page.formatCombo = ComboBox(), ComboBox()
-    page.engineCombo.addItem("Rubber Band R3 Finer (Studio Quality)", "r3_finer")
-    page.engineCombo.addItem("FFmpeg Rubber Band (Fast Formant)", "ffmpeg_formant")
+    for text, val in (("Rubber Band R3 Finer (Studio Quality)", "r3_finer"), ("FFmpeg Rubber Band (Fast Formant)", "ffmpeg_formant")):
+        page.engineCombo.addItem(text, val)
     for label, key in (("WAV 24-bit (Cubase / DAW Ready)", "wav"), ("FLAC Lossless", "flac"), ("MP3 320 kbps", "mp3")):
         page.formatCombo.addItem(label, key)
     page.formatCombo.currentIndexChanged.connect(page._update_preview_labels)
@@ -121,7 +117,7 @@ def _engine_row(page) -> QHBoxLayout:
 
 
 def _export_card(page) -> QFrame:
-    card, layout = _card("A/B Audition & Non-Destructive Export")
+    card, layout = _card("STEP 4 · AUDITION & EXPORT", "4. ฟังเปรียบเทียบเสียงและส่งออกไฟล์ใหม่ (Audition & Export)", "กด Play Original (A) เทียบกับ Preview Shifted (B) เพื่อตรวจคุณภาพเสียง แล้วกด Export Shifted Copy เพื่อสร้างไฟล์ใหม่")
     page.outputPreviewLabel, page.statusLabel = QLabel("Original file is never overwritten.", objectName="MutedText"), QLabel("Load an audio file to begin.", objectName="MutedText")
     actions = QHBoxLayout()
     page.previewOrigBtn, page.previewShiftedBtn = ToolButton("Play Original (A)"), ToolButton("Preview Shifted (B)")
@@ -132,18 +128,22 @@ def _export_card(page) -> QFrame:
     for w in (page.previewOrigBtn, page.previewShiftedBtn):
         actions.addWidget(w)
     actions.addStretch(1)
-    actions.addWidget(page.openFolderBtn)
-    actions.addWidget(page.exportBtn)
+    for w in (page.openFolderBtn, page.exportBtn):
+        actions.addWidget(w)
     for w in (page.outputPreviewLabel, page.statusLabel):
         layout.addWidget(w)
     layout.addLayout(actions)
     return card
 
 
-def _card(title: str) -> tuple[QFrame, QVBoxLayout]:
-    card = QFrame(objectName="AudioToolsCard")
-    layout = QVBoxLayout(card)
+def _card(pill: str, title: str, desc: str) -> tuple[QFrame, QVBoxLayout]:
+    card, layout = QFrame(objectName="AudioToolsCard"), QVBoxLayout()
+    card.setLayout(layout)
     layout.setContentsMargins(16, 14, 16, 14)
-    layout.setSpacing(10)
-    layout.addWidget(QLabel(title, objectName="SectionTitle"))
+    layout.setSpacing(8)
+    top = QHBoxLayout()
+    top.addWidget(QLabel(pill, objectName="CategoryPill"))
+    top.addWidget(QLabel(title, objectName="SectionTitle"), 1)
+    layout.addLayout(top)
+    layout.addWidget(QLabel(desc, objectName="SectionDesc"))
     return card, layout

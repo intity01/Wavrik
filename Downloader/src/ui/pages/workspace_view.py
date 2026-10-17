@@ -1,4 +1,4 @@
-"""Build the vertically responsive download workspace."""
+"""Build the vertically responsive download workspace with clear categorized structure."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ def build(workspace) -> None:
     workspace.pageContent = QWidget()
     root = QVBoxLayout(workspace.pageContent)
     root.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
-    root.setContentsMargins(24, 22, 24, 22)
+    root.setContentsMargins(24, 20, 24, 20)
     root.setSpacing(14)
     root.addLayout(_header(workspace))
     _add_primary_controls(workspace, root)
@@ -49,6 +49,10 @@ def _add_queue_regions(workspace, root: QVBoxLayout) -> None:
     workspace.bannerArea = QVBoxLayout()
     workspace.bannerArea.setSpacing(8)
     root.addLayout(workspace.bannerArea)
+    q_top = QHBoxLayout()
+    q_top.addWidget(QLabel("STEP 3 · QUEUE", objectName="CategoryPill"))
+    q_top.addWidget(QLabel("3. รายการดาวน์โหลด (Active Queue)", objectName="SectionTitle"), 1)
+    root.addLayout(q_top)
     workspace.queueContainer = QWidget()
     workspace.listLay = QVBoxLayout(workspace.queueContainer)
     workspace.listLay.setContentsMargins(0, 0, 0, 0)
@@ -62,15 +66,12 @@ def _add_queue_regions(workspace, root: QVBoxLayout) -> None:
 def _header(workspace) -> QHBoxLayout:
     row = QHBoxLayout()
     labels = QVBoxLayout()
-    title = QLabel("Downloads")
-    title.setObjectName("PageTitle")
-    subtitle = QLabel("Add a link, choose the output once, then download the queue.")
-    subtitle.setObjectName("PageSubtitle")
+    labels.setSpacing(2)
+    labels.addWidget(QLabel("Downloads · ระบบดาวน์โหลดและนำเข้าสื่อ", objectName="PageTitle"))
+    subtitle = QLabel("ทำงาน 3 ขั้นตอน: (1) วางลิงก์ -> (2) เลือกประเภท Audio/Video และคุณภาพ -> (3) จัดการคิวงาน (ไฟล์เสียงจะถูกวิเคราะห์คีย์และ BPM อัตโนมัติ)", objectName="PageSubtitle")
     subtitle.setWordWrap(True)
-    labels.addWidget(title)
     labels.addWidget(subtitle)
-    workspace.queueCount = QLabel("0 items")
-    workspace.queueCount.setObjectName("MutedText")
+    workspace.queueCount = QLabel("0 items", objectName="MutedText")
     row.addLayout(labels, 1)
     row.addWidget(workspace.queueCount)
     return row

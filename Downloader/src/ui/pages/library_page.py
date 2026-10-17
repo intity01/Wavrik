@@ -39,8 +39,8 @@ class LibraryInterface(QWidget):
 
     def _build_header(self) -> QHBoxLayout:
         header, labels = QHBoxLayout(), QVBoxLayout()
-        labels.addWidget(QLabel("Library", objectName="PageTitle"))
-        labels.addWidget(QLabel("Search downloaded tracks and local files, auto-detect Key & BPM, or send to Audio Tools.", objectName="PageSubtitle"))
+        labels.addWidget(QLabel("Library · คลังสื่อและผลวิเคราะห์ Key/BPM", objectName="PageTitle"))
+        labels.addWidget(QLabel("ค้นหาไฟล์เพลง/วิดีโอตามชื่อเพลง, คีย์ (Key), รหัส Camelot หรือ BPM พร้อมส่งไป Audio Tools ได้ทันที", objectName="PageSubtitle"))
         self.addLocalBtn, clear = PushButton("Add local file"), DangerPushButton("Clear library")
         self.addLocalBtn.clicked.connect(self._add_local)
         clear.clicked.connect(self._clear)
@@ -51,7 +51,7 @@ class LibraryInterface(QWidget):
 
     def _build_filters(self) -> QHBoxLayout:
         filters = QHBoxLayout()
-        self.searchBar, self.typeFilter, self.statusFilter = LineEdit(placeholderText="Search title, file name, Key (e.g. F# minor, 11A), or BPM"), ComboBox(), ComboBox()
+        self.searchBar, self.typeFilter, self.statusFilter = LineEdit(placeholderText="ค้นหาชื่อเพลง, คีย์ เช่น F# minor, รหัส Camelot เช่น 11A หรือเลข BPM..."), ComboBox(), ComboBox()
         self.typeFilter.addItems(["All media", "Audio", "Video"])
         self.statusFilter.addItems(["All statuses", "Completed", "Failed", "Cancelled"])
         self.searchBar.textChanged.connect(self._debounce.start)

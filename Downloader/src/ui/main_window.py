@@ -70,17 +70,20 @@ class MediaDownloaderUI(WindowLifecycleMixin, QMainWindow):
         self.pageSettings.updateAvailable.connect(self._update_available)
 
     def _build_navigation(self) -> None:
-        self._add_page(self.pageWorkspace, FluentIcon.HOME, "Downloads")
-        self._add_page(self.pageAudioTools, FluentIcon.AUDIO, "Audio Tools")
-        self._add_page(self.pageLibrary, FluentIcon.HISTORY, "Library")
-        self._add_page(self.pageSettings, FluentIcon.SETTING, "Settings", NavigationItemPosition.BOTTOM)
+        self.navigationPanel.addSection("1. MEDIA & LIBRARY")
+        self._add_page(self.pageWorkspace, FluentIcon.HOME, "Downloads", tip="ดาวน์โหลดวิดีโอ/เพลงจากลิงก์และส่งวิเคราะห์คีย์อัตโนมัติ")
+        self._add_page(self.pageLibrary, FluentIcon.HISTORY, "Library", tip="คลังสื่อในเครื่อง ค้นหาตามชื่อเพลง, คีย์ (Key), Camelot หรือ BPM")
+        self.navigationPanel.addSection("2. AUDIO STUDIO")
+        self._add_page(self.pageAudioTools, FluentIcon.AUDIO, "Audio Tools", tip="วิเคราะห์ Key/BPM ระดับสตูดิโอ และปรับคีย์/ความเร็วด้วย Rubber Band R3")
+        self.navigationPanel.addSection("3. SYSTEM", NavigationItemPosition.BOTTOM)
+        self._add_page(self.pageSettings, FluentIcon.SETTING, "Settings", NavigationItemPosition.BOTTOM, "ตั้งค่าภาษา คิวงานดาวน์โหลด และการอัปเดต")
         self.navigationPanel.setCurrentItem(self.pageWorkspace.objectName())
         self.stackedWidget.currentChanged.connect(self._page_changed)
 
-    def _add_page(self, page, icon, text: str, position=NavigationItemPosition.TOP) -> None:
+    def _add_page(self, page, icon, text: str, position=NavigationItemPosition.TOP, tip: str = "") -> None:
         self.navigationPanel.addItem(
             page.objectName(), icon, text,
-            lambda checked=False, selected=page: self.switchTo(selected), position,
+            lambda checked=False, selected=page: self.switchTo(selected), position, tip,
         )
 
     def switchTo(self, page) -> None:

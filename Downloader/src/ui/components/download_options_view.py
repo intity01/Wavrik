@@ -41,13 +41,12 @@ def build(options) -> None:
 def header(options) -> QHBoxLayout:
     row = QHBoxLayout()
     text = QVBoxLayout()
-    title = QLabel("Download options")
-    title.setObjectName("SectionTitle")
-    detail = QLabel("Used for new downloads. Active jobs keep their current settings.")
-    detail.setObjectName("MutedText")
-    detail.setWordWrap(True)
-    text.addWidget(title)
-    text.addWidget(detail)
+    text.setSpacing(2)
+    top = QHBoxLayout()
+    top.addWidget(QLabel("STEP 2 · FORMAT & QUALITY", objectName="CategoryPill"))
+    top.addWidget(QLabel("2. ตั้งค่าประเภทไฟล์ คุณภาพ และโฟลเดอร์ (Format & Location)", objectName="SectionTitle"), 1)
+    text.addLayout(top)
+    text.addWidget(QLabel("Audio (ดึงเฉพาะเสียงและวิเคราะห์ Key/BPM อัตโนมัติ) หรือ Video ความละเอียดสูง", objectName="SectionDesc"))
     options.downloadAllButton = PrimaryPushButton("Download all")
     options.downloadAllButton.setEnabled(False)
     options.downloadAllButton.clicked.connect(options.downloadAllRequested.emit)
@@ -74,9 +73,8 @@ def combo(name: str, items: list[str]) -> ComboBox:
 
 def engine_combo() -> ComboBox:
     control = combo("Download compatibility", [])
-    control.addItem("Auto — recommended", "auto")
-    control.addItem("Built-in downloader", "native")
-    control.addItem("Compatibility downloader", "yt-dlp")
+    for label, key in (("Auto — recommended", "auto"), ("Built-in downloader", "native"), ("Compatibility downloader", "yt-dlp")):
+        control.addItem(label, key)
     return control
 
 
