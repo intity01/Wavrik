@@ -57,7 +57,7 @@ class LibraryInterface(QWidget):
 
     def enqueueAutoAnalyze(self, file_path: str) -> None:
         p, key = Path(file_path), str(Path(file_path))
-        if p.is_file() and p.suffix.lower() in AUDIO_EXTS and key not in self._analysisCache:
+        if p.is_file() and p.suffix.lower() in AUDIO_EXTS and p.stat().st_size >= 100 and key not in self._analysisCache:
             signals = AudioToolSignals()
             signals.analyzed.connect(self.storeAnalysisResult)
             self._bgSignals.append(signals)

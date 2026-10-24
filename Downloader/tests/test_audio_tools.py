@@ -278,3 +278,78 @@ def test_batch_audio_processing_service_and_worker(tmp_path: Path):
     worker = BatchAudioWorker([wav1, wav2], cfg, signals, {str(wav1): "C major", str(wav2): "A minor"})
     worker.run()
     assert len(processed) == 2
+
+
+def test_stem_separation_bit_perfect_phase_lock(tmp_path: Path):
+    from src.services.audio_stems import _read_pcm16, separate_stems
+
+    src = _write_test_wav(tmp_path / "master_song.wav", seconds=1.5)
+    out_dir = tmp_path / "stems"
+    res = separate_stems(src, out_dir, mode="dsp_2stem")
+    assert res.vocals_path.is_file()
+    assert res.instrumental_path.is_file()
+
+    m_pcm, _, _ = _read_pcm16(src)
+    v_pcm, _, _ = _read_pcm16(res.vocals_path)
+    i_pcm, _, _ = _read_pcm16(res.instrumental_path)
+    assert len(m_pcm) == len(v_pcm) == len(i_pcm)
+    # Prove 100% bit-perfect phase reconstruction: Master[i] == Vocal[i] + Instrumental[i]
+    assert all(v_pcm[idx] + i_pcm[idx] == m_pcm[idx] for idx in range(len(m_pcm)))
+
+
+def test_detuning_invariant_hpcp_432hz():
+    from src.services.audio_hpcp import extract_key_candidates
+
+    sr = 16000
+    detune_ratio = 432.0 / 440.0
+    # C-major progression notes (C4, E4, G4) detuned to A4=432Hz
+    freqs = (261.63 * detune_ratio, 329.63 * detune_ratio, 392.00 * detune_ratio, 130.81 * detune_ratio)
+    samples = [
+        0.25 * sum(math.sin(2.0 * math.pi * f * (i / sr)) for f in freqs)
+        for i in range(sr * 3)
+    ]
+    cands = extract_key_candidates(samples, sr)
+    assert cands[0]["key"] in {"C major", "A minor", "G major"}
+
+
+def test_interactive_waveform_seek_transport_and_stem_rack(
+    qtbot, config, logger, fake_downloader, history, tmp_path: Path,
+):
+    tray = MagicMock()
+    tray.isAvailable.return_value = False
+    window = MediaDownloaderUI(
+        config, logger, fake_downloader,
+        UpdateManager("2.1.0", "owner/repo", logger), tray, history,
+    )
+    qtbot.addWidget(window)
+    tools = window.pageAudioTools
+    wav_path = _write_test_wav(tmp_path / "studio_track.wav", seconds=2.0)
+    tools.loadFile(wav_path, {
+        "filePath": str(wav_path),
+        "key": "C major",
+        "camelot": "8B",
+        "bpm": 120.0,
+        "confidence": 94,
+        "section_summary": "Stable: C major (8B) throughout",
+        "key_candidates": [{"key": "C major", "correlation": 0.91}],
+        "peaks": [0.2, 0.5, 0.9, 0.6],
+        "duration_sec": 60.0,
+    })
+
+    tools.waveformWidget.setSeekPosition(18.5)
+    assert tools.waveformWidget.seekPosition() == 18.5
+    tools._on_seek_requested(18.5)
+    assert "0:18" in tools.statusLabel.text()
+
+    tools._play_original()
+    assert tools.transport.isPlaying()
+    assert tools.transport.activeSlot() == "A"
+    tools._stop_playback()
+    assert not tools.transport.isPlaying()
+
+    tools._separate_stems()
+    qtbot.waitUntil(lambda: not tools._busy, timeout=8000)
+    assert tools.loadVocalsBtn.isEnabled()
+    assert tools.loadInstBtn.isEnabled()
+    tools.loadInstBtn.click()
+    assert "Instrumental" in tools._source.name

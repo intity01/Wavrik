@@ -52,18 +52,19 @@ def render_pitch_shift(
 
 def render_audio_clip(
     source: str | Path, target: str | Path, semitones: int,
-    options: tuple[str, str, float, float] = ("r3_finer", "wav", 1.0, 0.0),
+    options: tuple = ("r3_finer", "wav", 1.0, 0.0, 0.0),
 ) -> Path:
-    engine, fmt, tempo_ratio, max_dur = options
+    engine, fmt, tempo_ratio, max_dur = options[:4]
+    start_sec = float(options[4]) if len(options) > 4 else 0.0
     src, dst = _validate_paths(source, target, semitones, tempo_ratio)
     ffmpeg_exe = _require_ffmpeg()
-    rb_exe = find_rubberband() if engine == "r3_finer" else None
+    rb_exe = find_rubberband() if engine in {"r3_finer", "r3_percussive"} else None
     dst.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="wavrik-pitch-", dir=dst.parent) as stage_dir:
         staged = Path(stage_dir) / f"output{_FORMATS.get(fmt, _FORMATS['wav'])[0]}"
-        opts = (semitones, fmt, tempo_ratio, max_dur)
+        opts = (semitones, fmt, tempo_ratio, max_dur, start_sec, engine)
         if semitones == 0 and abs(tempo_ratio - 1.0) < 1e-4:
-            _encode_direct(ffmpeg_exe, src, staged, fmt, max_dur)
+            _encode_direct(ffmpeg_exe, src, staged, fmt, max_dur, start_sec)
         elif rb_exe:
             _render_with_r3(ffmpeg_exe, rb_exe, src, staged, opts)
         else:
@@ -91,45 +92,38 @@ def _validate_paths(
 
 def _require_ffmpeg() -> str:
     folder = find_ffmpeg()
-    exe_name = "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg"
-    if folder and (Path(folder) / exe_name).is_file():
-        return str(Path(folder) / exe_name)
-    found = shutil.which("ffmpeg")
+    exe = "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg"
+    found = str(Path(folder) / exe) if (folder and (Path(folder) / exe).is_file()) else shutil.which("ffmpeg")
     if not found:
         raise RuntimeError("FFmpeg executable is required for audio rendering.")
     return found
 
 
-def _encode_direct(ffmpeg_exe: str, src: Path, dst: Path, fmt: str, max_dur: float = 0.0) -> None:
-    codec = _FORMATS.get(fmt, _FORMATS["wav"])[1]
-    limit = ["-t", f"{max_dur:.1f}"] if max_dur > 0 else []
-    cmd = [ffmpeg_exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(src), *limit, "-vn", *codec, str(dst)]
-    _run_cmd(cmd)
-
-
-def _render_with_r3(
-    ffmpeg_exe: str, rb_exe: str, src: Path, dst: Path, opts: tuple[int, str, float, float],
+def _encode_direct(
+    ffmpeg_exe: str, src: Path, dst: Path, fmt: str, max_dur: float = 0.0, start_sec: float = 0.0,
 ) -> None:
-    semitones, fmt, tempo_ratio, max_dur = opts
-    quiet = dst.parent / "headroom_in.wav"
-    shifted = dst.parent / "r3_shifted.wav"
     codec = _FORMATS.get(fmt, _FORMATS["wav"])[1]
-    limit = ["-t", f"{max_dur:.1f}"] if max_dur > 0 else []
+    seek, limit = (["-ss", f"{start_sec:.2f}"] if start_sec > 0 else []), (["-t", f"{max_dur:.1f}"] if max_dur > 0 else [])
+    _run_cmd([ffmpeg_exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", *seek, "-i", str(src), *limit, "-vn", *codec, str(dst)])
+
+
+def _render_with_r3(ffmpeg_exe: str, rb_exe: str, src: Path, dst: Path, opts: tuple) -> None:
+    semitones, fmt, tempo_ratio, max_dur, start_sec, engine = opts
+    quiet, shifted, codec = dst.parent / "headroom_in.wav", dst.parent / "r3_shifted.wav", _FORMATS.get(fmt, _FORMATS["wav"])[1]
+    seek, limit = (["-ss", f"{start_sec:.2f}"] if start_sec > 0 else []), (["-t", f"{max_dur:.1f}"] if max_dur > 0 else [])
     dur_ratio = f"{1.0 / max(0.5, min(2.0, tempo_ratio)):.6f}"
-    _run_cmd([ffmpeg_exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(src), *limit, "-vn", "-af", "volume=0.25", "-c:a", "pcm_f32le", str(quiet)])
-    _run_cmd([rb_exe, "-3", "-F", "--centre-focus", "-t", dur_ratio, "-p", str(semitones), str(quiet), str(shifted)])
-    _run_cmd([ffmpeg_exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(shifted), "-vn", "-af", "volume=4.0,alimiter=limit=0.891:level=disabled", *codec, str(dst)])
+    r3_flags = ["-3", "--pitch-hq"] if engine == "r3_percussive" else ["-3", "-F", "--centre-focus"]
+    _run_cmd([ffmpeg_exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", *seek, "-i", str(src), *limit, "-vn", "-af", "volume=0.5", "-c:a", "pcm_f32le", str(quiet)])
+    _run_cmd([rb_exe, *r3_flags, "-t", dur_ratio, "-p", str(semitones), str(quiet), str(shifted)])
+    _run_cmd([ffmpeg_exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(shifted), "-vn", "-af", "volume=2.0,alimiter=limit=0.95:level=disabled", *codec, str(dst)])
 
 
-def _render_with_ffmpeg(
-    ffmpeg_exe: str, src: Path, dst: Path, opts: tuple[int, str, float, float],
-) -> None:
-    semitones, fmt, tempo_ratio, max_dur = opts
-    ratio = 2.0 ** (semitones / 12.0)
-    limit = ["-t", f"{max_dur:.1f}"] if max_dur > 0 else []
+def _render_with_ffmpeg(ffmpeg_exe: str, src: Path, dst: Path, opts: tuple) -> None:
+    semitones, fmt, tempo_ratio, max_dur, start_sec, _ = opts
+    ratio, codec = 2.0 ** (semitones / 12.0), _FORMATS.get(fmt, _FORMATS["wav"])[1]
+    seek, limit = (["-ss", f"{start_sec:.2f}"] if start_sec > 0 else []), (["-t", f"{max_dur:.1f}"] if max_dur > 0 else [])
     filt = f"rubberband=tempo={tempo_ratio:.6f}:pitch={ratio:.8f}:pitchq=quality:channels=together:formant=preserved"
-    codec = _FORMATS.get(fmt, _FORMATS["wav"])[1]
-    _run_cmd([ffmpeg_exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(src), *limit, "-vn", "-af", filt, *codec, str(dst)])
+    _run_cmd([ffmpeg_exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", *seek, "-i", str(src), *limit, "-vn", "-af", filt, *codec, str(dst)])
 
 
 def _run_cmd(cmd: list[str]) -> None:

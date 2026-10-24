@@ -1,10 +1,11 @@
-"""Studio Inspector & Rack layout for the Audio Tools page."""
+"""Studio Inspector, Stem Separation, and DSP Rack layout for the Audio Tools page."""
 from __future__ import annotations
 from PyQt6.QtWidgets import QDoubleSpinBox, QFrame, QHBoxLayout, QLabel, QSpinBox, QVBoxLayout, QWidget
 from src.services.audio_analysis import ALL_KEYS
 from src.ui.components.controls import ComboBox, ElidedLabel, PrimaryPushButton, PushButton, SmoothScrollArea, ToolButton
 from src.ui.components.waveform_widget import WaveformWidget
 from src.ui.i18n import tr
+from .audio_tools_presenter import build_stem_rack
 
 
 def build_ui(page) -> None:
@@ -12,11 +13,11 @@ def build_ui(page) -> None:
     root.setContentsMargins(0, 0, 0, 0)
     scroll, content = SmoothScrollArea(widgetResizable=True), QWidget()
     layout = QVBoxLayout(content)
-    layout.setContentsMargins(20, 16, 20, 16)
-    layout.setSpacing(10)
+    layout.setContentsMargins(20, 14, 20, 14)
+    layout.setSpacing(8)
     page.titleLabel = QLabel("Audio Tools", objectName="PageTitle")
     page.subtitleLabel = QLabel(tr("at.subtitle", "en"), objectName="PageSubtitle", wordWrap=True)
-    for w in (page.titleLabel, page.subtitleLabel, _source_bar(page), _inspector_rack(page), _dsp_rack(page), _audition_bar(page)):
+    for w in (page.titleLabel, page.subtitleLabel, _source_bar(page), _inspector_rack(page), build_stem_rack(page), _dsp_rack(page), _audition_bar(page)):
         layout.addWidget(w)
     layout.addStretch(1)
     scroll.setWidget(content)
@@ -35,6 +36,7 @@ def _source_bar(page) -> QFrame:
         row.addWidget(w, st)
     return card
 
+
 def _inspector_rack(page) -> QFrame:
     card = QFrame(objectName="AudioToolsCard")
     layout = QVBoxLayout(card)
@@ -45,6 +47,7 @@ def _inspector_rack(page) -> QFrame:
     for w, st in ((QLabel("HARMONIC & WAVEFORM INSPECTOR", objectName="FieldLabel"), 0), (page.sectionKeyLabel, 1), (page.badgeLabel, 0), (page.reanalyzeBtn, 0)):
         top.addWidget(w, st)
     page.waveformWidget, page.detectedKeyCombo, page.camelotLabel = WaveformWidget(), ComboBox(), QLabel("Camelot: 8B", objectName="StepBadge")
+    page.waveformWidget.seekRequested.connect(page._on_seek_requested)
     page.detectedKeyCombo.addItems(list(ALL_KEYS))
     page.detectedKeyCombo.currentTextChanged.connect(page._update_preview_labels)
     for w in (QLabel("Detected / Override Key:", objectName="MutedText"), page.detectedKeyCombo, page.camelotLabel):
@@ -117,7 +120,7 @@ def _bpm_row(page) -> QHBoxLayout:
 def _engine_row(page) -> QHBoxLayout:
     row = QHBoxLayout()
     page.engineCombo, page.formatCombo = ComboBox(), ComboBox()
-    for text, val in (("Rubber Band R3 Finer (Studio Quality)", "r3_finer"), ("FFmpeg Rubber Band (Fast Formant)", "ffmpeg_formant")):
+    for text, val in (("Rubber Band R3 Vocal (Formant + Centre Focus)", "r3_finer"), ("Rubber Band R3 Percussive / Full Mix (Wide Stereo)", "r3_percussive"), ("FFmpeg Rubber Band (Fast Formant)", "ffmpeg_formant")):
         page.engineCombo.addItem(text, val)
     for label, key in (("WAV 24-bit (Cubase / DAW Ready)", "wav"), ("FLAC Lossless", "flac"), ("MP3 320 kbps", "mp3")):
         page.formatCombo.addItem(label, key)
@@ -135,16 +138,13 @@ def _audition_bar(page) -> QFrame:
     page.outputPreviewLabel, page.statusLabel = ElidedLabel("Original file is never overwritten.", objectName="MonoValue"), QLabel("Load an audio file to begin.", objectName="MutedText")
     info_row.addWidget(page.outputPreviewLabel, 1)
     info_row.addWidget(page.statusLabel)
-    page.previewOrigBtn, page.previewShiftedBtn = ToolButton("Play Original (A)"), ToolButton("Preview Shifted (B)")
+    page.previewOrigBtn, page.previewShiftedBtn, page.stopAudioBtn = ToolButton("Play Original (A)"), ToolButton("Preview Shifted (B)"), ToolButton("Stop")
     page.exportBtn, page.openFolderBtn = PrimaryPushButton("Export Shifted Copy"), PushButton("Show in folder")
     page.openFolderBtn.hide()
-    for btn, fn in ((page.previewOrigBtn, page._play_original), (page.previewShiftedBtn, page._preview_shifted), (page.exportBtn, page._export_shifted), (page.openFolderBtn, page._open_export_folder)):
+    for btn, fn in ((page.previewOrigBtn, page._play_original), (page.previewShiftedBtn, page._preview_shifted), (page.stopAudioBtn, page._stop_playback), (page.exportBtn, page._export_shifted), (page.openFolderBtn, page._open_export_folder)):
         btn.clicked.connect(fn)
-    actions.addWidget(page.previewOrigBtn)
-    actions.addWidget(page.previewShiftedBtn)
-    actions.addStretch(1)
-    actions.addWidget(page.openFolderBtn)
-    actions.addWidget(page.exportBtn)
+    for w, st in ((page.previewOrigBtn, 0), (page.previewShiftedBtn, 0), (page.stopAudioBtn, 0), (QWidget(), 1), (page.openFolderBtn, 0), (page.exportBtn, 0)):
+        actions.addWidget(w, st)
     layout.addLayout(info_row)
     layout.addLayout(actions)
     return card

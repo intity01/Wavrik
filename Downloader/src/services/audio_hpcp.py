@@ -47,17 +47,15 @@ def extract_key_and_sections(samples: list[float], sr: int = 16000) -> tuple[lis
     starts = list(range(0, max(1, len(padded) - _N + 1), stride))
     hp1, hp2, mid = [0.0] * 12, [0.0] * 12, max(1, len(starts) // 2)
     for idx in range(0, len(starts), 2):
-        s1 = starts[idx]
+        s1, dst1 = starts[idx], (hp1 if idx < mid else hp2)
         f1 = [padded[s1 + i] * _WIN[i] for i in range(_N)]
-        dst1 = hp1 if idx < mid else hp2
         if idx + 1 < len(starts):
             s2 = starts[idx + 1]
             sp1, sp2 = _fft_pair_mag(f1, [padded[s2 + i] * _WIN[i] for i in range(_N)])
             _accumulate_frame_hpcp(sp1, float(sr), dst1)
             _accumulate_frame_hpcp(sp2, float(sr), hp1 if (idx + 1) < mid else hp2)
         else:
-            sp1, _ = _fft_pair_mag(f1, [0.0] * _N)
-            _accumulate_frame_hpcp(sp1, float(sr), dst1)
+            _accumulate_frame_hpcp(_fft_pair_mag(f1, [0.0] * _N)[0], float(sr), dst1)
     full = _correlate_bgate(_gate_pcp([hp1[i] + hp2[i] for i in range(12)]))
     k1 = _correlate_bgate(_gate_pcp(hp1))[0]["key"] if max(hp1) > 0 else full[0]["key"]
     k2 = _correlate_bgate(_gate_pcp(hp2))[0]["key"] if max(hp2) > 0 else full[0]["key"]
@@ -102,8 +100,16 @@ def _accumulate_frame_hpcp(spec: list[float], sr: float, hpcp: list[float]) -> N
         _whiten_to_hpcp(spec, peaks[:60], hpcp)
 
 
+def _estimate_ref_hz(peaks: list[tuple[float, float]]) -> float:
+    top = peaks[:12]
+    s_sin = sum(m * math.sin(2.0 * math.pi * (12.0 * math.log2(f / 440.0))) for m, f in top)
+    s_cos = sum(m * math.cos(2.0 * math.pi * (12.0 * math.log2(f / 440.0))) for m, f in top)
+    dev = math.atan2(s_sin, s_cos) / (2.0 * math.pi) if top else 0.0
+    return 440.0 * (2.0 ** (max(-0.45, min(0.45, dev)) / 12.0))
+
+
 def _whiten_to_hpcp(spec: list[float], peaks: list[tuple[float, float]], hpcp: list[float]) -> None:
-    spec_e = [s * s for s in spec]
+    spec_e, ref_hz = [s * s for s in spec], _estimate_ref_hz(peaks)
     y_db: list[float] = []
     for b, e, weights in _SW_BANDS:
         num = sum(se * se * w4 for se, w4 in zip(spec_e[b:e], weights))
@@ -111,14 +117,13 @@ def _whiten_to_hpcp(spec: list[float], peaks: list[tuple[float, float]], hpcp: l
         y_db.append(20.0 * math.log10(max(1e-20, math.sqrt(max(0.0, num / den if den > 0.0 else 0.0)))))
     y_db[-1] = y_db[-2]
     for mag, freq in peaks:
-        amp = 20.0 * math.log10(max(1e-20, mag))
-        pos = max(0.0, min(69.9999, freq / 50.0))
+        amp, pos = 20.0 * math.log10(max(1e-20, mag)), max(0.0, min(69.9999, freq / 50.0))
         i0 = int(pos)
         env = y_db[i0] * (1.0 - (pos - i0)) + y_db[i0 + 1] * (pos - i0)
         w = 0.0 if amp > env else (amp - env if amp > env - 30.0 else -200.0)
-        wm2 = (10.0 ** ((w - 20.0 * freq / 4000.0) / 20.0)) ** 2
+        wm2 = ((10.0 ** ((w - 20.0 * freq / 4000.0) / 20.0)) ** 2) * (1.30 if freq < 220.0 else 1.0)
         for semi_shift, hw2 in _HARM_TABLE:
-            pc = (12.0 * math.log2(freq * (2.0 ** (-semi_shift / 12.0)) / 440.0)) % 12.0
+            pc = (12.0 * math.log2(freq * (2.0 ** (-semi_shift / 12.0)) / ref_hz)) % 12.0
             for b0 in range(12):
                 d = min(abs(pc - b0), 12.0 - abs(pc - b0))
                 if d < 0.5:

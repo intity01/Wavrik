@@ -26,6 +26,7 @@ class PitchJob:
     fmt: str = "wav"
     is_preview: bool = False
     tempo_ratio: float = 1.0
+    start_sec: float = 0.0
 
 
 class AnalyzeAudioWorker(QRunnable):
@@ -52,7 +53,8 @@ class RenderPitchWorker(QRunnable):
     def run(self) -> None:
         try:
             max_dur = 25.0 if self._job.is_preview else 0.0
-            opts = (self._job.engine, self._job.fmt, self._job.tempo_ratio, max_dur)
+            start = self._job.start_sec if self._job.is_preview else 0.0
+            opts = (self._job.engine, self._job.fmt, self._job.tempo_ratio, max_dur, start)
             out = render_audio_clip(self._job.source, self._job.target, self._job.semitones, opts)
             self._signals.rendered.emit(str(out), self._job.is_preview)
         except Exception as exc:

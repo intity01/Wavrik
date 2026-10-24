@@ -30,7 +30,14 @@ def estimate_bpm(samples: list[float], sr: int) -> float:
         sub_b = max(t_cands, key=lambda b: scores.get(b, 0.0))
         if scores.get(sub_b, 0.0) >= top_sc * 0.91:
             best_bpm = sub_b
-    return float(best_bpm)
+    return _parabolic_bpm_refine(best_bpm, scores)
+
+
+def _parabolic_bpm_refine(bpm: int, scores: dict[int, float]) -> float:
+    ym1, y0, yp1 = scores.get(bpm - 1, 0.0), scores.get(bpm, 0.0), scores.get(bpm + 1, 0.0)
+    den = ym1 - 2.0 * y0 + yp1
+    delta = max(-0.4, min(0.4, 0.5 * (ym1 - yp1) / den)) if abs(den) > 1e-9 and ym1 > 0 and yp1 > 0 else 0.0
+    return round(float(bpm) + delta, 1)
 
 
 def _spectral_flux_onset(samples: list[float], sr: int, win: int, hop: int) -> list[float]:
