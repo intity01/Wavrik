@@ -1,11 +1,11 @@
-"""Categorized application sidebar with Wavrik studio header."""
+"""Compact Precision Sidebar with single-locale section labels."""
 
 from __future__ import annotations
 
-import sys
-
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QFrame, QLabel, QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+
+from src.ui.i18n import tr
 
 
 class NavigationItemPosition:
@@ -24,22 +24,25 @@ class NavigationPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("NavigationPanel")
-        self.setFixedWidth(200)
+        self.setFixedWidth(184)
         root = QVBoxLayout(self)
-        root.setContentsMargins(12, 16, 12, 14)
-        root.setSpacing(6)
-        root.addWidget(_brand_header())
+        root.setContentsMargins(10, 12, 10, 12)
+        root.setSpacing(4)
+        self._brand_sub = QLabel(objectName="BrandSubtitle")
+        root.addWidget(_brand_header(self._brand_sub))
         self._top = QVBoxLayout()
+        self._top.setSpacing(2)
         self._bottom = QVBoxLayout()
+        self._bottom.setSpacing(2)
         root.addLayout(self._top)
         root.addStretch(1)
         root.addLayout(self._bottom)
         self.buttons: dict[str, QPushButton] = {}
-        if sys.platform == "darwin":
-            self.setProperty("macosSidebar", True)
+        self._sections: list[tuple[QLabel, str]] = []
 
-    def addSection(self, title: str, position=None) -> None:
-        lbl = QLabel(title, objectName="NavCategoryLabel")
+    def addSection(self, title_key: str, position=None) -> None:
+        lbl = QLabel(objectName="NavCategoryLabel")
+        self._sections.append((lbl, title_key))
         target = self._bottom if position == NavigationItemPosition.BOTTOM else self._top
         target.addWidget(lbl)
 
@@ -60,17 +63,28 @@ class NavigationPanel(QWidget):
         for key, button in self.buttons.items():
             button.setChecked(key == routeKey)
 
+    def setLanguage(self, lang: str) -> None:
+        self._brand_sub.setText(tr("brand.subtitle", lang))
+        for lbl, key in self._sections:
+            lbl.setText(tr(key, lang))
+
     def updateStyles(self) -> None:
         self.update()
 
 
-def _brand_header() -> QFrame:
+def _brand_header(sub_label: QLabel) -> QFrame:
     card = QFrame(objectName="BrandHeader")
     lay = QVBoxLayout(card)
-    lay.setContentsMargins(12, 10, 12, 10)
-    lay.setSpacing(2)
-    lay.addWidget(QLabel("WAVRIK", objectName="BrandTitle"))
-    sub = QLabel("Media & Key/BPM Studio", objectName="BrandSubtitle")
-    sub.setWordWrap(True)
-    lay.addWidget(sub)
+    lay.setContentsMargins(8, 2, 8, 10)
+    lay.setSpacing(1)
+    top = QHBoxLayout()
+    top.setContentsMargins(0, 0, 0, 0)
+    top.setSpacing(3)
+    top.addWidget(QLabel("WAVRIK", objectName="BrandTitle"))
+    top.addWidget(QLabel("●", objectName="BrandDot"))
+    top.addStretch(1)
+    lay.addLayout(top)
+    sub_label.setText(tr("brand.subtitle", "en"))
+    sub_label.setWordWrap(True)
+    lay.addWidget(sub_label)
     return card

@@ -186,6 +186,54 @@ def test_library_to_audio_tools_navigation_and_controls(
     assert hasattr(tools, "waveformWidget")
 
 
+def test_long_filename_elision_and_persisted_analysis(
+    qtbot, config, logger, fake_downloader, history, tmp_path: Path,
+):
+    tray = MagicMock()
+    tray.isAvailable.return_value = False
+    window = MediaDownloaderUI(
+        config, logger, fake_downloader,
+        UpdateManager("2.1.0", "owner/repo", logger), tray, history,
+    )
+    qtbot.addWidget(window)
+    window.resize(1120, 760)
+    window.show()
+
+    long_name = (
+        "Dua Lipa - Training Season (Live from the Royal Albert Hall) "
+        "[Official Performance Video] (Instrumental) (Mel-RoFormer by Gabox Fv7).wav"
+    )
+    wav_path = _write_test_wav(tmp_path / long_name, seconds=2.0)
+    with patch("src.ui.pages.library_page.get_open_file_path", return_value=wav_path):
+        window.pageLibrary._add_local()
+
+    analysis_payload = {
+        "filePath": str(wav_path),
+        "key": "F minor",
+        "camelot": "4A",
+        "bpm": 123.0,
+        "confidence": 92,
+        "section_summary": "Stable: F minor (4A) throughout",
+        "key_candidates": [{"key": "F minor", "correlation": 0.89}],
+        "peaks": [0.05, 0.2, 0.15, 0.25],
+        "duration_sec": 210.0,
+    }
+    window.pageLibrary.storeAnalysisResult(analysis_payload)
+
+    # Verify analysis is persisted to history.json across reloads
+    saved_entries = history.getHistory()
+    assert saved_entries[0]["analysis"]["key"] == "F minor"
+    assert saved_entries[0]["analysis"]["camelot"] == "4A"
+
+    # Load into Audio Tools and ensure long filename never blows out scroll content width
+    window.pageAudioTools.loadFile(wav_path, analysis_payload)
+    qtbot.wait(20)
+    viewport_w = window.pageAudioTools.findChild(object, "AudioToolsCard").width()
+    assert viewport_w <= window.width()
+    assert long_name in window.pageAudioTools.fileLabel.text()
+    assert max(window.pageAudioTools.waveformWidget._peaks) == 1.0
+
+
 def test_camelot_wheel_harmonic_neighbors():
     from src.services.audio_camelot import get_harmonic_neighbors, key_from_camelot, semitone_distance
 

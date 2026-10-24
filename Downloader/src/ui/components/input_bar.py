@@ -1,4 +1,4 @@
-"""Validated URL entry and batch import with step categorization."""
+"""Dense URL entry bar without instructional bloat or STEP pills."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import QApplication, QFrame, QHBoxLayout, QLabel, QVBoxLayo
 
 from src.core.parser import normalizeUrl, parseImportFile
 from src.ui.dialogs import get_open_file_path
+from src.ui.i18n import tr
 
 from .controls import LineEdit, PrimaryPushButton, ToolButton
 
@@ -19,44 +20,39 @@ class InputBar(QFrame):
         super().__init__(parent)
         self.setObjectName("InputPanel")
         root = QVBoxLayout(self)
-        root.setContentsMargins(14, 12, 14, 12)
-        root.setSpacing(8)
-        root.addLayout(_header())
+        root.setContentsMargins(10, 8, 10, 8)
+        root.setSpacing(6)
         root.addLayout(self._primary_row())
-        root.addLayout(self._secondary_row())
         self.errorLabel = QLabel(objectName="InlineError")
         self.errorLabel.hide()
         root.addWidget(self.errorLabel)
 
     def _primary_row(self) -> QHBoxLayout:
-        primary_row = QHBoxLayout()
-        primary_row.setSpacing(8)
+        row = QHBoxLayout()
+        row.setSpacing(6)
         self.urlInput = LineEdit()
-        self.urlInput.setPlaceholderText("Paste a public video or playlist URL (YouTube, SoundCloud, direct MP4/MP3...)")
+        self.urlInput.setPlaceholderText(tr("dl.url_placeholder", "en"))
         self.urlInput.setAccessibleName("Video or playlist URL")
         self.urlInput.setAccessibleDescription("Paste a public HTTP or HTTPS link to check before downloading.")
         self.urlInput.setClearButtonEnabled(True)
         self.urlInput.returnPressed.connect(self._add)
-        add = PrimaryPushButton("Add to queue")
-        add.setAccessibleName("Add URL to download queue")
-        add.clicked.connect(self._add)
-        primary_row.addWidget(self.urlInput, 1)
-        primary_row.addWidget(add)
-        return primary_row
+        self.pasteButton = ToolButton("Paste from clipboard")
+        self.pasteButton.setAccessibleName("Paste URL from clipboard and add it to the queue")
+        self.pasteButton.clicked.connect(self._paste)
+        self.importButton = ToolButton("Import .txt list")
+        self.importButton.setAccessibleName("Import URLs from a text file")
+        self.importButton.clicked.connect(self._import)
+        self.addButton = PrimaryPushButton("Add to queue")
+        self.addButton.setAccessibleName("Add URL to download queue")
+        self.addButton.clicked.connect(self._add)
+        row.addWidget(self.urlInput, 1)
+        row.addWidget(self.pasteButton)
+        row.addWidget(self.importButton)
+        row.addWidget(self.addButton)
+        return row
 
-    def _secondary_row(self) -> QHBoxLayout:
-        secondary_row = QHBoxLayout()
-        hint = QLabel("ระบบจะตรวจสอบสถานะลิงก์ก่อนเริ่มดาวน์โหลด", objectName="MutedText")
-        secondary_row.addWidget(hint, 1)
-        paste = ToolButton("Paste from clipboard")
-        paste.setAccessibleName("Paste URL from clipboard and add it to the queue")
-        paste.clicked.connect(self._paste)
-        import_button = ToolButton("Import .txt list")
-        import_button.setAccessibleName("Import URLs from a text file")
-        import_button.clicked.connect(self._import)
-        secondary_row.addWidget(paste)
-        secondary_row.addWidget(import_button)
-        return secondary_row
+    def setLanguage(self, lang: str) -> None:
+        self.urlInput.setPlaceholderText(tr("dl.url_placeholder", lang))
 
     def _paste(self) -> None:
         if (clipboard := QApplication.clipboard()) and (text := clipboard.text().strip()):
@@ -83,14 +79,3 @@ class InputBar(QFrame):
     def showError(self, message: str) -> None:
         self.errorLabel.setText(message)
         self.errorLabel.show()
-
-
-def _header() -> QVBoxLayout:
-    box = QVBoxLayout()
-    box.setSpacing(2)
-    top = QHBoxLayout()
-    top.addWidget(QLabel("STEP 1 · URL INPUT", objectName="CategoryPill"))
-    top.addWidget(QLabel("1. วางลิงก์หรือนำเข้าชุดลิงก์ (Link / Batch Input)", objectName="SectionTitle"), 1)
-    box.addLayout(top)
-    box.addWidget(QLabel("วางลิงก์วิดีโอหรือเพลงสาธารณะ หรือนำเข้าจากไฟล์ .txt เพื่อเพิ่มลงคิวงาน", objectName="SectionDesc"))
-    return box

@@ -1,39 +1,40 @@
-# Design System — Midnight Utility 2.1
+# Design System — Precision Pro-Utility (Wavrik 2.1)
 
 ## Product scene
 
-โปรแกรมนี้ถูกใช้บน Windows desktop ระหว่างที่ผู้ใช้กำลังทำงานอื่นอยู่ ผู้ใช้ต้องมองเห็นว่า “ลิงก์ถูกต้องไหม”, “จะได้ไฟล์แบบไหน”, “ไฟล์จะไปอยู่ที่ไหน” และ “งานคืบหน้าถึงไหน” โดยไม่ต้องเรียนรู้ศัพท์ของ yt-dlp
+โปรแกรมเดสก์ท็อปสำหรับดาวน์โหลดสื่อและวิเคราะห์/ปรับแต่งเสียงระดับสตูดิโอ ผู้ใช้ต้องมองเห็นสถานะของลิงก์ รูปแบบไฟล์ปลายทาง พาธที่บันทึก ตลอดจนค่าทางเทคนิค (Key, Camelot, BPM, Semitone Shift, Tempo Ratio) ได้อย่างแม่นยำในหน้าจอเดียว
 
 ## Design direction
 
-อินเทอร์เฟซเป็นเครื่องมือที่สงบ ตรงไปตรงมา และไว้ใจได้ ใช้ native product patterns, solid surfaces, border และ spacing เพื่อสร้างลำดับชั้น ไม่มี gradient, glow, glassmorphism หรือ decoration ที่ไม่ช่วยงาน
+ใช้แนวทาง **Precision Pro-Utility** (แรงบันดาลใจจาก Linear, Ableton Live, FabFilter):
+- ลำดับชั้นพื้นผิว 4 ระดับด้วยความสว่าง (Luminance Stepping) และเส้นขอบ 1px
+- จำกัดพื้นที่สี Accent (`#2BC3B0`) ไม่เกิน 5% ของหน้าจอ เฉพาะ Primary CTA, Active Navigation Indicator, Focus Ring และ Playhead
+- ใช้ฟอนต์ Monospace (`Consolas` / `JetBrains Mono`) กับตัวเลขทางเทคนิคทั้งหมด (Key, Camelot, BPM, Semitones, Ratio, เปอร์เซ็นต์, ขนาดไฟล์)
+- ห้ามใช้ gradient, glow, glassmorphism, เงาฟุ้ง หรือการวางการ์ดซ้อนการ์ด (No Card-in-Card)
 
-## Semantic palette
+## Semantic palette (Precision Graphite)
 
-### Dark
+- Level 0 App Shell (`bg`): `#0F1113`
+- Level 1 Sidebar & Workspace (`panel`): `#14171A`
+- Level 2 Rack Module / Row (`surface`): `#191D21`
+- Level 3 Input Well / Hover (`hover` / `input`): `#1F252B` / `#111417`
+- Border (`border` / `border_strong`): `#262C33` / `#363F49`
+- Text (`text` / `muted`): `#ECEFF4` / `#8A94A2`
+- Accent (`ACCENT`): `#2BC3B0`
+- Status: Success `#2EA043`, Warning `#D29922`, Danger `#F85149`
 
-- Background `#0B0F16`
-- Panel `#101722`
-- Surface `#151E2B`
-- Hover `#1A2636`
-- Border `#263449`
-- Strong border `#3A4B63`
-- Text `#F3F6FA`
-- Muted `#9AA8BA`
+สีทั้งหมดเรียกผ่าน semantic tokens ใน `src/ui/theme/tokens.py` เท่านั้น
 
-### Light
+## 4-Tier Button Hierarchy
 
-- Background `#F4F7FB`
-- Panel/Surface `#FFFFFF`
-- Hover `#EEF3F9`
-- Border `#D6DFEA`
-- Strong border `#AAB8C9`
-- Text `#111827`
-- Muted `#526173`
+1. **Tier 1 (`PrimaryButton`)**: เติมสี `#2BC3B0` ตัวอักษรเข้ม `#0B0E11` — มีได้เพียงปุ่มหลักเดียวต่อมุมมอง (`Add to queue`, `Export Audio`)
+2. **Tier 2 (`SecondaryButton`)**: พื้น `#1F252B` ขอบ `#363F49` — สำหรับคำสั่งรอง (`Download all`, `Preview Shifted`, `Batch Process...`)
+3. **Tier 3 (`GhostButton` / `IconActionButton`)**: พื้นโปร่งใส ขอบบาง — สำหรับคำสั่งระดับแถว (`Folder`, `Audio Tools`, `×2`, `÷2`, `Import .txt`)
+4. **Tier 4 (`DangerButton`)**: พื้นโปร่งใส ขอบและตัวอักษรสีแดง `#F85149` — สำหรับการลบหรือล้างประวัติ (`Clear history`)
 
-Default accent `#2563EB`; success `#22C55E`; warning `#F59E0B`; danger `#EF4444`
+## Single-Locale Rule (TH / EN)
 
-สีทั้งหมดเรียกผ่าน semantic tokens ใน `src/ui/theme/tokens.py` และ accent ใช้เฉพาะ primary action, focus, selected state และ progress
+รองรับการสลับภาษาไทย (`th`) และอังกฤษ (`en`) จากหน้า Settings โดยเปลี่ยนข้อความทุกหน้าทันที ห้ามผสมคำไทยปนอังกฤษในประโยคเดียว (No Tinglish) ยกเว้นชื่อเฉพาะทางเทคนิคสากล (`WAV`, `FLAC`, `MP3`, `BPM`, `Camelot`, `FFmpeg`, `Rubber Band R3`)
 
 ## Typography
 

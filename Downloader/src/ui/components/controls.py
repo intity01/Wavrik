@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFontMetrics
 from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -12,6 +13,7 @@ from PyQt6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
 )
 
@@ -56,7 +58,47 @@ class ProgressBar(QProgressBar):
 
 
 class SmoothScrollArea(QScrollArea):
-    pass
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+
+class ElidedLabel(QLabel):
+    """Single-line label that elides long filenames without expanding parent layouts."""
+
+    def __init__(
+        self,
+        text: str = "",
+        parent=None,
+        mode: Qt.TextElideMode = Qt.TextElideMode.ElideMiddle,
+        **kwargs,
+    ):
+        super().__init__(text, parent, **kwargs)
+        self._full_text = text
+        self._mode = mode
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.setMinimumWidth(60)
+        self._update_elided()
+
+    def text(self) -> str:
+        return self._full_text
+
+    def setText(self, text: str) -> None:
+        self._full_text = text
+        self.setToolTip(text if len(text) > 48 else "")
+        self._update_elided()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._update_elided()
+
+    def _update_elided(self) -> None:
+        w = self.width()
+        if w <= 20:
+            super().setText(self._full_text)
+            return
+        metrics = QFontMetrics(self.font())
+        super().setText(metrics.elidedText(self._full_text, self._mode, max(20, w - 4)))
 
 
 class ToggleButton(QPushButton):
@@ -85,14 +127,11 @@ class MessageBox(QDialog):
         self.setWindowTitle(title)
         self.setMinimumWidth(360)
         layout = QVBoxLayout(self)
-        heading = QLabel(title)
-        heading.setObjectName("SectionTitle")
-        message = QLabel(content)
-        message.setWordWrap(True)
+        heading = QLabel(title, objectName="SectionTitle")
+        message = QLabel(content, wordWrap=True)
         row = QHBoxLayout()
         row.addStretch(1)
-        cancel = PushButton("Cancel")
-        confirm = PrimaryPushButton(confirm_text)
+        cancel, confirm = PushButton("Cancel"), PrimaryPushButton(confirm_text)
         cancel.clicked.connect(self.reject)
         confirm.clicked.connect(self.accept)
         row.addWidget(cancel)

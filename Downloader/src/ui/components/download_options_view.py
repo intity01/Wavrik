@@ -1,67 +1,64 @@
-"""Widget construction helpers for the download options panel."""
+"""Compact utility toolbar for output format, save location, and engine."""
 
 from __future__ import annotations
 
-from PyQt6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
+
+from src.ui.i18n import tr
 
 from .controls import ComboBox, LineEdit, PrimaryPushButton, PushButton, ToolButton
 
 
 def build(options) -> None:
     root = QVBoxLayout(options)
-    root.setContentsMargins(16, 14, 16, 14)
-    root.setSpacing(12)
-    root.addLayout(header(options))
-    controls = controls_grid()
+    root.setContentsMargins(10, 8, 10, 8)
+    root.setSpacing(6)
     options.mediaCombo = combo("Media type", ["Audio", "Video"])
+    options.mediaCombo.setFixedWidth(96)
     options.presetCombo = ComboBox()
     options.presetCombo.setAccessibleName("Format and quality")
+    options.presetCombo.setMinimumWidth(160)
     options.engineCombo = engine_combo()
     options.pathInput = LineEdit(options._cfg.get("downloadPath", ""))
     options.pathInput.setReadOnly(True)
     options.pathInput.setCursorPosition(0)
     options.pathInput.setAccessibleName("Download folder")
     options.browseButton = PushButton("Change folder")
-    options.browseButton.setMaximumWidth(160)
     options.browseButton.clicked.connect(options._browse)
-    add_main_fields(controls, options)
-    root.addLayout(controls)
     options.advancedButton = ToolButton("Advanced options")
     options.advancedButton.setCheckable(True)
     options.advancedButton.setAccessibleDescription("Show download compatibility options")
+    options.downloadAllButton = PrimaryPushButton("Download all")
+    options.downloadAllButton.setEnabled(False)
+    options.downloadAllButton.clicked.connect(options.downloadAllRequested.emit)
+    root.addLayout(_toolbar_row(options))
     options.advancedPanel = advanced_panel(options.engineCombo)
     options.advancedButton.toggled.connect(options.advancedPanel.setVisible)
-    root.addWidget(options.advancedButton)
     root.addWidget(options.advancedPanel)
     options.mediaCombo.currentTextChanged.connect(options._media_changed)
     options.presetCombo.currentIndexChanged.connect(options._preset_changed)
     options.engineCombo.currentIndexChanged.connect(options._engine_changed)
 
 
-def header(options) -> QHBoxLayout:
+def _toolbar_row(options) -> QHBoxLayout:
     row = QHBoxLayout()
-    text = QVBoxLayout()
-    text.setSpacing(2)
-    top = QHBoxLayout()
-    top.addWidget(QLabel("STEP 2 · FORMAT & QUALITY", objectName="CategoryPill"))
-    top.addWidget(QLabel("2. ตั้งค่าประเภทไฟล์ คุณภาพ และโฟลเดอร์ (Format & Location)", objectName="SectionTitle"), 1)
-    text.addLayout(top)
-    text.addWidget(QLabel("Audio (ดึงเฉพาะเสียงและวิเคราะห์ Key/BPM อัตโนมัติ) หรือ Video ความละเอียดสูง", objectName="SectionDesc"))
-    options.downloadAllButton = PrimaryPushButton("Download all")
-    options.downloadAllButton.setEnabled(False)
-    options.downloadAllButton.clicked.connect(options.downloadAllRequested.emit)
-    row.addLayout(text, 1)
-    row.addWidget(options.downloadAllButton)
+    row.setSpacing(8)
+    options.lblType = field_label("TYPE")
+    options.lblFormat = field_label("FORMAT")
+    options.lblFolder = field_label("FOLDER")
+    for w, stretch in (
+        (options.lblType, 0),
+        (options.mediaCombo, 0),
+        (options.lblFormat, 0),
+        (options.presetCombo, 0),
+        (options.lblFolder, 0),
+        (options.pathInput, 1),
+        (options.browseButton, 0),
+        (options.advancedButton, 0),
+        (options.downloadAllButton, 0),
+    ):
+        row.addWidget(w, stretch)
     return row
-
-
-def controls_grid() -> QGridLayout:
-    controls = QGridLayout()
-    controls.setHorizontalSpacing(10)
-    controls.setVerticalSpacing(6)
-    controls.setColumnStretch(0, 2)
-    controls.setColumnStretch(1, 3)
-    return controls
 
 
 def combo(name: str, items: list[str]) -> ComboBox:
@@ -73,47 +70,39 @@ def combo(name: str, items: list[str]) -> ComboBox:
 
 def engine_combo() -> ComboBox:
     control = combo("Download compatibility", [])
-    for label, key in (("Auto — recommended", "auto"), ("Built-in downloader", "native"), ("Compatibility downloader", "yt-dlp")):
+    for label, key in (
+        ("Auto — recommended", "auto"),
+        ("Built-in downloader", "native"),
+        ("Compatibility downloader", "yt-dlp"),
+    ):
         control.addItem(label, key)
     return control
 
 
-def add_main_fields(controls: QGridLayout, options) -> None:
-    controls.addWidget(field_label("Media type"), 0, 0)
-    controls.addWidget(field_label("Format and quality"), 0, 1)
-    controls.addWidget(options.mediaCombo, 1, 0)
-    controls.addWidget(options.presetCombo, 1, 1)
-    controls.addWidget(field_label("Save location"), 2, 0, 1, 2)
-    controls.addWidget(path_control(options.pathInput, options.browseButton), 3, 0, 1, 2)
-
-
 def advanced_panel(engine_combo_control: ComboBox) -> QWidget:
     panel = QWidget()
-    layout = QVBoxLayout(panel)
-    layout.setContentsMargins(0, 0, 0, 0)
-    layout.addWidget(field_label("Download compatibility"))
-    detail = QLabel("Leave this on Auto unless a download needs help.")
-    detail.setObjectName("MutedText")
-    layout.addWidget(detail)
+    layout = QHBoxLayout(panel)
+    layout.setContentsMargins(0, 2, 0, 0)
+    layout.setSpacing(8)
+    layout.addWidget(field_label("COMPATIBILITY ENGINE"))
     layout.addWidget(engine_combo_control)
+    detail = QLabel("Leave on Auto unless a source requires specific extraction.")
+    detail.setObjectName("MutedText")
+    layout.addWidget(detail, 1)
     panel.setVisible(False)
     return panel
-
-
-def path_control(path_input: LineEdit, button: PushButton) -> QWidget:
-    row = QHBoxLayout()
-    row.setContentsMargins(0, 0, 0, 0)
-    row.addWidget(path_input, 1)
-    row.addWidget(button)
-    wrapper = QWidget()
-    wrapper.setLayout(row)
-    return wrapper
 
 
 def field_label(text: str) -> QLabel:
     label = QLabel(text)
     label.setObjectName("FieldLabel")
     return label
+
+
+def set_language(options, lang: str) -> None:
+    options.lblType.setText(tr("dl.type_label", lang).upper())
+    options.lblFormat.setText(tr("dl.format_label", lang).upper())
+    options.lblFolder.setText(tr("dl.folder_label", lang).upper())
 
 
 def short_label(label: str) -> str:

@@ -9,11 +9,12 @@ This project uses PyQt6 under the GNU General Public License v3.0 (GPLv3). River
 - Official licensing information: https://www.riverbankcomputing.com/software/pyqt
 - License FAQ: https://www.riverbankcomputing.com/commercial/license-faq
 
-## FFmpeg binary
+## FFmpeg and Rubber Band R3 binaries
 
-The bundled `ffmpeg.exe` reports itself as `8.1.1-essentials_build-www.gyan.dev`, built with `--enable-gpl --enable-version3`, and reports GPLv3-or-later terms with `ffmpeg.exe -L`. Any release that includes this executable must meet the GPL obligations for that exact build, including the applicable notices and corresponding-source obligations.
+The bundled `ffmpeg.exe` reports itself as `8.1.1-essentials_build-www.gyan.dev`, built with `--enable-gpl --enable-version3`, and reports GPLv3-or-later terms with `ffmpeg.exe -L`. The optional bundled `rubberband.exe` (Rubber Band Library v4.0.0 R3 CLI utility) and `sndfile.dll` are distributed under the GNU General Public License v2.0 or later (and LGPLv2.1+ for libsndfile). Any release that includes these executables must meet the GPL obligations for those builds, including the applicable notices and corresponding-source obligations.
 
 - FFmpeg licensing guidance: https://ffmpeg.org/legal.html
+- Rubber Band Library licensing information: https://breakfastquay.com/rubberband/
 
 ## yt-dlp, yt-dlp-ejs, Deno, and Requests
 

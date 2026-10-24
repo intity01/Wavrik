@@ -101,6 +101,11 @@ class QueueItemCard(QWidget):
     def setStatus(self, state: str, message: str) -> None:
         changed = self._state != state
         self._state = state
+        if state == "failed" and self._videoTitle == "Reading media information":
+            self._videoTitle = "Unable to read media"
+            self._title.setText(self._videoTitle)
+            if self._lblMeta.text() == "Waiting for metadata":
+                self._lblMeta.setText(self._url)
         self._lblStatus.setText(message)
         self._lblStatus.setProperty("status", state)
         if changed:

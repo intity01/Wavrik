@@ -1,39 +1,10 @@
-"""DSP routines for Hann harmonic chroma key extraction and multi-band spectral flux BPM."""
+"""DSP routines for multi-band spectral flux BPM estimation and peak envelope downsampling."""
 
 from __future__ import annotations
 
 import math
 
 _FLUX_FREQS = (75.0, 130.0, 220.0, 380.0, 660.0, 1150.0, 2000.0, 3400.0)
-
-
-def compute_chroma(samples: list[float], sr: int) -> list[float]:
-    win = min(4096, len(samples))
-    hann = [0.5 - 0.5 * math.cos(2.0 * math.pi * i / max(1, win - 1)) for i in range(win)]
-    stride = max(win, len(samples) // 60)
-    coeffs = [(m % 12, 2.0 * math.cos(2.0 * math.pi * (440.0 * (2.0 ** ((m - 69) / 12.0))) / sr)) for m in range(53, 89)]
-    chroma = [0.0] * 12
-    for start in range(0, len(samples) - win + 1, stride):
-        f_ch = _frame_pitch_energy([samples[start + i] * hann[i] for i in range(win)], coeffs)
-        mean_e = sum(f_ch) / 12.0
-        whitened = [max(0.0, v - 0.9 * mean_e) for v in f_ch]
-        peak = max(whitened, default=0.0)
-        if peak > 1e-6:
-            for pc in range(12):
-                chroma[pc] += whitened[pc] / peak
-    mx = max(chroma, default=1.0) or 1.0
-    return [v / mx for v in chroma]
-
-
-def _frame_pitch_energy(frame: list[float], coeffs: list[tuple[int, float]]) -> list[float]:
-    f_ch = [0.0] * 12
-    for pc, coeff in coeffs:
-        s1, s2 = 0.0, 0.0
-        for x in frame:
-            s0 = x + coeff * s1 - s2
-            s2, s1 = s1, s0
-        f_ch[pc] += math.log1p(20.0 * math.sqrt(max(0.0, s1 * s1 + s2 * s2 - coeff * s1 * s2)))
-    return f_ch
 
 
 def estimate_bpm(samples: list[float], sr: int) -> float:
@@ -103,8 +74,16 @@ def _accumulate_window_bpm(w: list[float], fps: float, scores: dict[int, float])
         return
     wnorm = [x / norm for x in w]
     max_lag = min(wn - 2, int(fps * 60.0 * 4.0 / 65.0) + 4)
+    needed: set[int] = set()
+    for bpm in range(66, 180):
+        base = fps * 60.0 / bpm
+        for mult in (1.0, 2.0, 3.0, 4.0):
+            idx = int(base * mult)
+            if 15 <= idx < max_lag:
+                needed.add(idx)
+                needed.add(idx + 1)
     acf = [0.0] * (max_lag + 1)
-    for lag in range(15, max_lag + 1):
+    for lag in needed:
         acf[lag] = sum(wnorm[i] * wnorm[i - lag] for i in range(lag, wn)) / (wn - lag)
     for bpm in range(66, 180):
         lag = fps * 60.0 / bpm
@@ -130,4 +109,8 @@ def downsample_peaks(samples: list[float], count: int = 80) -> list[float]:
     if not samples:
         return []
     step = max(1, len(samples) // count)
-    return [round(max((abs(s) for s in samples[i : i + step]), default=0.0), 3) for i in range(0, len(samples), step)][:count]
+    raw = [max((abs(s) for s in samples[i : i + step]), default=0.0) for i in range(0, len(samples), step)][:count]
+    top = max(raw, default=0.0)
+    if top <= 1e-6:
+        return [0.05] * len(raw)
+    return [round(max(0.05, min(1.0, (p / top) ** 0.75)), 3) for p in raw]

@@ -85,11 +85,11 @@ def mirex_bpm_score(predicted: float, reference: float) -> tuple[float, str]:
     return 0.0, "miss"
 
 
-def analyze_audio_file(path: str | Path, max_seconds: int = 250) -> dict:
+def analyze_audio_file(path: str | Path, max_seconds: int = 180) -> dict:
     samples, sr = _decode_mono_samples(Path(path), max_seconds)
     if len(samples) < sr // 2 or max((abs(x) for x in samples), default=0.0) < 1e-5:
         return {"key": "C major", "camelot": "8B", "bpm": 120.0, "confidence": 0, "status": "unavailable", "key_candidates": []}
-    bpm_slice = samples[10 * sr : 160 * sr] if len(samples) > 40 * sr else samples
+    bpm_slice = samples[10 * sr : 70 * sr] if len(samples) > 40 * sr else samples
     candidates, k1, k2 = _extract_key_and_sections(samples, sr)
     top_key, r1 = candidates[0]["key"], float(candidates[0]["correlation"])
     sec_key, r2 = candidates[1]["key"], float(candidates[1]["correlation"])
@@ -110,7 +110,7 @@ def analyze_audio_file(path: str | Path, max_seconds: int = 250) -> dict:
         "modulated": modulated,
         "section_summary": sec_txt,
         "status": "estimate",
-        "badge": f"Experimental / Estimate · ความเชื่อมั่น {conf}% (2nd: {sec_key} · {rel})",
+        "badge": f"Experimental / Estimate · {conf}% ({sec_key} · {rel})",
         "key_candidates": candidates[:3],
         "peaks": _downsample_peaks(samples, 80),
         "duration_sec": round(len(samples) / float(sr), 1),

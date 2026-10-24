@@ -41,9 +41,11 @@ dist/
 *.manifest
 
 # External heavy binaries
-# Place ffmpeg.exe at repo root for local running and PyInstaller packaging,
-# but do not commit to Git to prevent repo bloat (>50MB GitHub warning, 100MB limit).
+# Place ffmpeg.exe, rubberband.exe, and sndfile.dll at repo root for local running and PyInstaller packaging,
+# but do not commit to Git to prevent repo bloat.
 ffmpeg.exe
+rubberband.exe
+sndfile.dll
 
 # User data & application state files
 settings.json
@@ -60,9 +62,4 @@ desktop.ini
 .idea/
 *.sublime-project
 *.sublime-workspace
-
-# Local research, spikes, and sketches (kept on disk, excluded from app repo)
-.hermes/
-sketches/
-spikes/
 

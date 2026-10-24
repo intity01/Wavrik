@@ -20,10 +20,16 @@ if not deno:
 if not deno or not deno.is_file():
     raise SystemExit("Deno is required. Install the build dependencies before building.")
 
+extra_binaries = [
+    (str(root / name), ".")
+    for name in ("rubberband.exe", "sndfile.dll")
+    if (root / name).is_file()
+]
+
 a = Analysis(
     [str(downloader / "main.py")],
     pathex=[str(downloader)],
-    binaries=[(str(root / "ffmpeg.exe"), "."), (str(deno), ".")],
+    binaries=[(str(root / "ffmpeg.exe"), "."), (str(deno), "."), *extra_binaries],
     datas=[
         (str(downloader / "src" / "core" / "app.ico"), "src/core"),
         (str(downloader / "src" / "ui" / "theme" / "fonts" / "Inter.ttf"), "src/ui/theme/fonts"),

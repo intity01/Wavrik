@@ -54,12 +54,10 @@ def find_deno() -> str | None:
 def find_rubberband() -> str | None:
     """Find bundled or local Rubber Band R3 CLI executable if available."""
     exe = "rubberband.exe" if sys.platform == "win32" else "rubberband"
-    spike_rel = Path("spikes/003-rubberband-finer/tools/rubberband-4.0.0/rubberband-4.0.0-gpl-executable-windows") / exe
     candidates = [
         application_root() / exe,
         resource_root() / exe,
         application_root() / "_internal" / exe,
-        application_root() / spike_rel,
     ]
     for candidate in candidates:
         if candidate.is_file():

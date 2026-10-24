@@ -59,8 +59,19 @@ def buildOptions(
     return options
 
 
-def metadataOptions(cookie_file: str = "", flat: bool = False, socket_timeout: int = 30) -> dict:
-    options = {"quiet": True, "no_warnings": True, "extract_flat": flat, "socket_timeout": socket_timeout}
+def metadataOptions(
+    cookie_file: str = "",
+    flat: bool | str = "in_playlist",
+    socket_timeout: int = 30,
+    max_items: int = 100,
+) -> dict:
+    options = {
+        "quiet": True,
+        "no_warnings": True,
+        "extract_flat": flat,
+        "playlistend": max_items,
+        "socket_timeout": socket_timeout,
+    }
     _apply_js_runtime(options)
     if cookie_file and Path(cookie_file).is_file():
         options["cookiefile"] = cookie_file

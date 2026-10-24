@@ -5,7 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-_TRACKING_KEYS = {"fbclid", "gclid", "si", "feature", "utm_source", "utm_medium", "utm_campaign"}
+_TRACKING_KEYS = {"fbclid", "gclid", "si", "feature", "utm_source", "utm_medium", "utm_campaign", "pp"}
+_YT_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"}
 
 
 def normalizeUrl(url: str) -> str:
@@ -19,8 +20,19 @@ def normalizeUrl(url: str) -> str:
         return ""
     if parts.username or parts.password:
         return ""
-    query = [(key, val) for key, val in parse_qsl(parts.query, keep_blank_values=True) if key not in _TRACKING_KEYS]
     host = parts.hostname.lower()
+    raw_query = parse_qsl(parts.query, keep_blank_values=True)
+    query = [(key, val) for key, val in raw_query if key not in _TRACKING_KEYS]
+
+    # For YouTube video links, strip endless algorithmic mix/radio parameters (list=RD..., start_radio)
+    if any(host == yt or host.endswith("." + yt) for yt in _YT_HOSTS):
+        query_dict = dict(query)
+        is_video = bool(query_dict.get("v")) or parts.path.startswith(("/watch", "/shorts/")) or host == "youtu.be"
+        list_id = query_dict.get("list", "")
+        is_mix_radio = list_id.startswith(("RD", "UL")) or "start_radio" in query_dict
+        if is_video and is_mix_radio:
+            query = [(k, v) for k, v in query if k not in {"list", "start_radio", "index"}]
+
     try:
         port = parts.port
     except ValueError:

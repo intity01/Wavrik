@@ -18,7 +18,7 @@ class BatchAudioDialog(QDialog):
         self._sources, self._cfg = [Path(p) for p in sources if Path(p).is_file()], config
         self._cached_keys = cached_keys or {}
         self._pool = QThreadPool(self)
-        self.setWindowTitle("Batch Audio Processing · ประมวลผลไฟล์เสียงแบบกลุ่ม")
+        self.setWindowTitle("Batch Audio Processing")
         self.setMinimumWidth(520)
         self._build_ui()
 

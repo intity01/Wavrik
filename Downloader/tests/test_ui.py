@@ -248,6 +248,16 @@ def test_phase1_dark_teal_palette_and_language_settings(qtbot, config, logger, f
     en_index = window.pageSettings.languageCombo.findData("en")
     window.pageSettings.languageCombo.setCurrentIndex(en_index)
     assert config.get("language") == "en"
+    assert window.pageWorkspace.titleLabel.text() == "Downloads"
+    assert window.pageLibrary.titleLabel.text() == "Library"
+    assert window.pageAudioTools.titleLabel.text() == "Audio Tools"
+
+    th_index = window.pageSettings.languageCombo.findData("th")
+    window.pageSettings.languageCombo.setCurrentIndex(th_index)
+    assert config.get("language") == "th"
+    assert window.pageWorkspace.titleLabel.text() == "ดาวน์โหลดสื่อ"
+    assert window.pageLibrary.titleLabel.text() == "คลังสื่อและผลวิเคราะห์"
+    assert window.pageAudioTools.titleLabel.text() == "สตูดิโอวิเคราะห์และปรับแต่งเสียง"
 
 
 def test_phase1_unified_library_local_file_and_audio_tools_signal(
@@ -270,4 +280,30 @@ def test_phase1_unified_library_local_file_and_audio_tools_signal(
     card = window.pageLibrary.listLay.itemAt(0).widget()
     card._open_audio_tools()
     assert opened_in_tools == [str(audio_file)]
+
+
+def test_queue_card_updates_title_on_failure(qtbot, config):
+    card = QueueItemCard("https://example.com/fail-test", config)
+    qtbot.addWidget(card)
+    assert card.getVideoTitle() == "Reading media information"
+    card.setStatus("failed", "Could not read this URL.")
+    assert card.getVideoTitle() == "Unable to read media"
+    assert card._title.text() == "Unable to read media"
+    assert "fail-test" in card._lblMeta.text()
+    assert card._btnDl.isEnabled()
+    assert card._btnDl.text() == "Retry"
+
+
+def test_clipboard_banner_dismisses_on_add(qtbot):
+    from src.ui.components.banners import ClipboardBanner
+    banner = ClipboardBanner("https://example.com/test-url")
+    qtbot.addWidget(banner)
+    dismissed = []
+    banner.dismissed.connect(lambda: dismissed.append(True))
+    banner.findChild(type(banner), "PrimaryPushButton")  # trigger via button
+    for child in banner.findChildren(object):
+        if hasattr(child, "text") and child.text() == "Add":
+            child.click()
+            break
+    assert len(dismissed) == 1
 

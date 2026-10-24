@@ -1,4 +1,4 @@
-"""Beginner-friendly download queue."""
+"""Precision download queue workspace."""
 
 from __future__ import annotations
 
@@ -33,9 +33,11 @@ class WorkspaceInterface(WorkspaceInteractionMixin, QWidget):
         workspace_view.build(self)
         self.destroyed.connect(self._cleanup)
 
+    def setLanguage(self, lang: str) -> None:
+        workspace_view.set_language(self, lang)
+
     def setMaxConcurrency(self, count: int) -> None:
         self._downloadPool.setMaxThreadCount(count)
-
 
     def addUrl(self, raw_url: str) -> None:
         url = normalizeUrl(raw_url)

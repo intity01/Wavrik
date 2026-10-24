@@ -68,6 +68,7 @@ class HistoryRecord:
     status: str | None = None
     error: str = ""
     thumbnail_path: str = ""
+    analysis: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

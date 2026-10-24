@@ -1,4 +1,4 @@
-"""Library row with file, folder, Key/BPM badge, and Audio Tools actions."""
+"""Compact library row with tabular columns for Title/Format, Key/Camelot/BPM, Status, and Actions."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from src.services.platform_actions import open_parent, open_path
 
-from .controls import ToolButton
+from .controls import ElidedLabel, ToolButton
 
 _AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus"}
 
@@ -26,104 +26,106 @@ class LibraryCard(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         card = QFrame(objectName="LibraryCard")
         outer.addWidget(card)
-        content = QVBoxLayout(card)
-        content.setContentsMargins(14, 12, 14, 12)
-        labels = QVBoxLayout()
-        title = QLabel(entry.get("title", "Untitled"), objectName="SectionTitle")
-        title.setWordWrap(True)
-        self.metadata = QLabel(self._metadata_text(), objectName="MutedText")
-        self.status = QLabel(self._status_text())
+        row = QHBoxLayout(card)
+        row.setContentsMargins(12, 8, 12, 8)
+        row.setSpacing(12)
+        row.addLayout(self._build_title_col(), 4)
+        row.addWidget(self._build_harmony_col(), 0)
+        self.status = QLabel(_status_text(entry), wordWrap=True)
         self.status.setProperty("status", entry.get("status", "failed"))
-        for w in (title, self.metadata, self.status):
-            labels.addWidget(w)
-        content.addLayout(labels)
-        self._add_actions(content)
+        row.addWidget(self.status, 2)
+        self._add_actions(row)
+
+    def _build_title_col(self) -> QVBoxLayout:
+        col = QVBoxLayout()
+        col.setSpacing(2)
+        title = ElidedLabel(self._entry.get("title", "Untitled"), objectName="SectionTitle")
+        self.metadata = ElidedLabel(_metadata_text(self._entry, self._analysis), objectName="MutedText")
+        col.addWidget(title)
+        col.addWidget(self.metadata)
+        return col
+
+    def _build_harmony_col(self) -> QWidget:
+        wrap = QWidget()
+        wrap.setFixedWidth(186)
+        lay = QHBoxLayout(wrap)
+        lay.setContentsMargins(0, 0, 0, 0)
+        self.harmonyBadge = QLabel(
+            _harmony_text(self._entry, self._analysis, self._is_audio_entry()),
+            objectName="StepBadge" if self._analysis.get("key") else "NeutralBadge",
+        )
+        lay.addWidget(self.harmonyBadge)
+        lay.addStretch(1)
+        return wrap
 
     def setAnalysisResult(self, result: dict) -> None:
         self._analysis = result
-        self.metadata.setText(self._metadata_text())
+        self.metadata.setText(_metadata_text(self._entry, self._analysis))
+        self.harmonyBadge.setText(_harmony_text(self._entry, self._analysis, self._is_audio_entry()))
+        self.harmonyBadge.setObjectName("StepBadge" if self._analysis.get("key") else "NeutralBadge")
+        self.harmonyBadge.style().unpolish(self.harmonyBadge)
+        self.harmonyBadge.style().polish(self.harmonyBadge)
 
-    def _add_actions(self, content: QVBoxLayout) -> None:
+    def _add_actions(self, row: QHBoxLayout) -> None:
         actions = QHBoxLayout()
-        actions.addStretch(1)
+        actions.setSpacing(6)
         if self._entry.get("status") == "completed" and self._entry.get("filePath"):
-            self._add_file_actions(actions)
+            if self._is_audio_entry():
+                btn = ToolButton("Open in Audio Tools")
+                btn.clicked.connect(self._open_audio_tools)
+                actions.addWidget(btn)
+            for txt, fn in (("Open file", self._open_file), ("Show in folder", self._open_folder)):
+                b = ToolButton(txt)
+                b.clicked.connect(fn)
+                actions.addWidget(b)
         elif bool(self._entry.get("url", "")):
-            self._add_retry_action(actions)
-        content.addLayout(actions)
-
-    def _add_file_actions(self, actions: QHBoxLayout) -> None:
-        if self._is_audio_entry():
-            tools_btn = ToolButton("Open in Audio Tools")
-            tools_btn.setAccessibleDescription("Send this audio file to Audio Tools")
-            tools_btn.clicked.connect(self._open_audio_tools)
-            actions.addWidget(tools_btn)
-        open_file, open_folder = ToolButton("Open file"), ToolButton("Show in folder")
-        open_file.setAccessibleDescription("Open the media file")
-        open_folder.setAccessibleDescription("Open the folder that contains the file")
-        open_file.clicked.connect(self._open_file)
-        open_folder.clicked.connect(self._open_folder)
-        actions.addWidget(open_file)
-        actions.addWidget(open_folder)
+            retry = ToolButton("Download again")
+            retry.clicked.connect(lambda: self.redownloadRequested.emit(self._entry.get("url", "")))
+            actions.addWidget(retry)
+        row.addLayout(actions)
 
     def _is_audio_entry(self) -> bool:
-        if self._entry.get("mediaType") == "audio":
-            return True
-        return Path(str(self._entry.get("filePath", ""))).suffix.lower() in _AUDIO_EXTENSIONS
-
-    def _add_retry_action(self, actions: QHBoxLayout) -> None:
-        retry = ToolButton("Download again")
-        retry.setAccessibleDescription("Add this URL back to the download queue")
-        retry.clicked.connect(lambda: self.redownloadRequested.emit(self._entry.get("url", "")))
-        actions.addWidget(retry)
-
-    def _metadata_text(self) -> str:
-        timestamp = self._entry.get("timestamp", "").replace("T", " ")[:16]
-        media_type = self._entry.get("mediaType", "unknown").title()
-        size = _format_size(int(self._entry.get("fileSize", 0) or 0))
-        base = f"{timestamp} · {media_type} · {size}"
-        if self._analysis.get("key"):
-            k = self._analysis["key"]
-            cam = self._analysis.get("camelot", "--")
-            bpm = float(self._analysis.get("bpm", 0.0))
-            conf = self._analysis.get("confidence", "")
-            c_tag = f" [{conf}%]" if conf else ""
-            return f"{base} · Key: {k} ({cam}) · {bpm:.1f} BPM{c_tag}"
-        return base
-
-    def _status_text(self) -> str:
-        status = self._entry.get("status", "failed").title()
-        error = self._entry.get("error", "")
-        return f"{status}: {error}" if error else status
+        return self._entry.get("mediaType") == "audio" or Path(str(self._entry.get("filePath", ""))).suffix.lower() in _AUDIO_EXTENSIONS
 
     def _open_audio_tools(self) -> None:
-        path = Path(self._entry.get("filePath", ""))
-        if not path.is_file():
-            self.status.setText("File is no longer available at the saved location")
-            return
-        self.openInAudioToolsRequested.emit(str(path))
+        p = Path(self._entry.get("filePath", ""))
+        self.openInAudioToolsRequested.emit(str(p)) if p.is_file() else self.status.setText("File is no longer available at the saved location")
 
     def _open_file(self) -> None:
-        path = Path(self._entry.get("filePath", ""))
-        if not path.is_file():
-            self.status.setText("File is no longer available at the saved location")
-            return
-        open_path(path)
+        p = Path(self._entry.get("filePath", ""))
+        open_path(p) if p.is_file() else self.status.setText("File is no longer available at the saved location")
 
     def _open_folder(self) -> None:
-        path = Path(self._entry.get("filePath", ""))
-        if not path.exists():
-            self.status.setText("File is no longer available at the saved location")
-            return
-        open_parent(path)
+        p = Path(self._entry.get("filePath", ""))
+        open_parent(p) if p.exists() else self.status.setText("File is no longer available at the saved location")
+
+
+def _harmony_text(entry: dict, analysis: dict, is_audio: bool) -> str:
+    if analysis.get("key"):
+        return f"{analysis['key']} ({analysis.get('camelot', '--')}) · {float(analysis.get('bpm', 0.0)):.1f} BPM"
+    return "Audio" if is_audio else "Video"
+
+
+def _metadata_text(entry: dict, analysis: dict) -> str:
+    ts = entry.get("timestamp", "").replace("T", " ")[:16]
+    base = f"{ts} · {entry.get('mediaType', 'unknown').title()} · {_format_size(int(entry.get('fileSize', 0) or 0))}"
+    if analysis.get("key"):
+        conf = f" [{analysis['confidence']}%]" if analysis.get("confidence") else ""
+        return f"{base} · Key: {analysis['key']} ({analysis.get('camelot', '--')}) · {float(analysis.get('bpm', 0.0)):.1f} BPM{conf}"
+    return base
+
+
+def _status_text(entry: dict) -> str:
+    st, err = entry.get("status", "failed").title(), entry.get("error", "")
+    return f"{st}: {err}" if err else st
 
 
 def _format_size(size: int) -> str:
     if size <= 0:
         return "Size unavailable"
-    value = float(size)
+    val = float(size)
     for unit in ("B", "KB", "MB", "GB"):
-        if value < 1024 or unit == "GB":
-            return f"{value:.1f} {unit}"
-        value /= 1024
+        if val < 1024 or unit == "GB":
+            return f"{val:.1f} {unit}"
+        val /= 1024
     return "Size unavailable"

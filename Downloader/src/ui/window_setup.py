@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
 from pathlib import Path
-
 from typing import Any
 
-from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
 
 
@@ -49,7 +46,6 @@ def initialize(window, dependencies: WindowDependencies) -> None:
     window.setWindowTitle("Wavrik")
     window.setMinimumSize(760, 600)
     window.resize(1120, 760)
-    _configure_platform(window)
     _set_icon(window)
     _sync_first_run_appearance(window)
     window._build_shell()
@@ -63,19 +59,6 @@ def initialize(window, dependencies: WindowDependencies) -> None:
 def _sync_first_run_appearance(window: Any) -> None:
     if getattr(window, "_cfg", None):
         window._cfg.set("theme", "dark")
-
-
-def _configure_platform(window) -> None:
-    if sys.platform != "darwin":
-        return
-    window.setWindowFlags(
-        Qt.WindowType.Window | Qt.WindowType.CustomizeWindowHint |
-        Qt.WindowType.WindowCloseButtonHint | Qt.WindowType.WindowMinimizeButtonHint |
-        Qt.WindowType.WindowMaximizeButtonHint | Qt.WindowType.WindowFullscreenButtonHint
-    )
-    window.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
-    from src.ui.macos import setup_macos_menu_bar
-    _, window._fullscreen_action = setup_macos_menu_bar(window, "Wavrik")
 
 
 def _set_icon(window) -> None:

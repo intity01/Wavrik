@@ -17,6 +17,7 @@ from src.ui.components.navigation import (
     NavigationItemPosition,
     NavigationPanel,
 )
+from src.ui.i18n import tr
 from src.ui.pages.audio_tools_page import AudioToolsInterface
 from src.ui.pages.library_page import LibraryInterface
 from src.ui.pages.settings_page import SettingsInterface
@@ -48,7 +49,7 @@ class MediaDownloaderUI(WindowLifecycleMixin, QMainWindow):
     def _build_pages(self) -> None:
         self.pageWorkspace = WorkspaceInterface(self._dl, self._hist, self._cfg)
         self.pageAudioTools = AudioToolsInterface(self._cfg, self._hist)
-        self.pageLibrary = LibraryInterface(self._hist)
+        self.pageLibrary = LibraryInterface(self._hist, self._cfg)
         self.pageHistory = self.pageLibrary
         self.pageSettings = SettingsInterface(self._cfg, self._updater)
         pages = (
@@ -66,25 +67,34 @@ class MediaDownloaderUI(WindowLifecycleMixin, QMainWindow):
         self.pageLibrary.redownloadRequested.connect(self._redownload)
         self.pageLibrary.openInAudioToolsRequested.connect(self._open_in_audio_tools)
         self.pageSettings.themeChanged.connect(self._refresh_theme)
+        self.pageSettings.languageChanged.connect(self._apply_language)
         self.pageSettings.concurrencyChanged.connect(self.pageWorkspace.setMaxConcurrency)
         self.pageSettings.updateAvailable.connect(self._update_available)
 
     def _build_navigation(self) -> None:
-        self.navigationPanel.addSection("1. MEDIA & LIBRARY")
-        self._add_page(self.pageWorkspace, FluentIcon.HOME, "Downloads", tip="ดาวน์โหลดวิดีโอ/เพลงจากลิงก์และส่งวิเคราะห์คีย์อัตโนมัติ")
-        self._add_page(self.pageLibrary, FluentIcon.HISTORY, "Library", tip="คลังสื่อในเครื่อง ค้นหาตามชื่อเพลง, คีย์ (Key), Camelot หรือ BPM")
-        self.navigationPanel.addSection("2. AUDIO STUDIO")
-        self._add_page(self.pageAudioTools, FluentIcon.AUDIO, "Audio Tools", tip="วิเคราะห์ Key/BPM ระดับสตูดิโอ และปรับคีย์/ความเร็วด้วย Rubber Band R3")
-        self.navigationPanel.addSection("3. SYSTEM", NavigationItemPosition.BOTTOM)
-        self._add_page(self.pageSettings, FluentIcon.SETTING, "Settings", NavigationItemPosition.BOTTOM, "ตั้งค่าภาษา คิวงานดาวน์โหลด และการอัปเดต")
+        lang = self._cfg.get("language", "en") if self._cfg else "en"
+        self.navigationPanel.addSection("nav.sec_media")
+        self._add_page(self.pageWorkspace, FluentIcon.HOME, "Downloads", tip=tr("nav.downloads_tip", lang))
+        self._add_page(self.pageLibrary, FluentIcon.HISTORY, "Library", tip=tr("nav.library_tip", lang))
+        self.navigationPanel.addSection("nav.sec_studio")
+        self._add_page(self.pageAudioTools, FluentIcon.AUDIO, "Audio Tools", tip=tr("nav.audio_tools_tip", lang))
+        self.navigationPanel.addSection("nav.sec_system", NavigationItemPosition.BOTTOM)
+        self._add_page(self.pageSettings, FluentIcon.SETTING, "Settings", NavigationItemPosition.BOTTOM, tr("nav.settings_tip", lang))
         self.navigationPanel.setCurrentItem(self.pageWorkspace.objectName())
         self.stackedWidget.currentChanged.connect(self._page_changed)
+        self._apply_language(lang)
 
     def _add_page(self, page, icon, text: str, position=NavigationItemPosition.TOP, tip: str = "") -> None:
         self.navigationPanel.addItem(
             page.objectName(), icon, text,
             lambda checked=False, selected=page: self.switchTo(selected), position, tip,
         )
+
+    def _apply_language(self, lang: str) -> None:
+        self.navigationPanel.setLanguage(lang)
+        for page in (self.pageWorkspace, self.pageLibrary, self.pageAudioTools, self.pageSettings):
+            if hasattr(page, "setLanguage"):
+                page.setLanguage(lang)
 
     def switchTo(self, page) -> None:
         self.stackedWidget.setCurrentWidget(page)

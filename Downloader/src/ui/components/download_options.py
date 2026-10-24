@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import QFrame
 from src.domain.presets import PRESETS, getPreset
 from src.ui.dialogs import get_save_directory
 
-from .download_options_view import build, short_label
+from .download_options_view import build, set_language, short_label
 
 
 class DownloadOptions(QFrame):
@@ -23,6 +23,9 @@ class DownloadOptions(QFrame):
         self.setObjectName("DownloadOptions")
         build(self)
         self._restore_default()
+
+    def setLanguage(self, lang: str) -> None:
+        set_language(self, lang)
 
     def _restore_default(self) -> None:
         preset = getPreset(self._cfg.get("defaultPreset"))

@@ -17,10 +17,13 @@ def metadata(info: dict) -> dict:
 
 
 def map_entries(entries: list[dict]) -> list[dict]:
-    return [
-        {"title": item.get("title", "Untitled"), "url": item.get("webpage_url") or item.get("url", "")}
-        for item in entries
-    ]
+    results = []
+    for item in entries:
+        url = item.get("webpage_url") or item.get("url", "")
+        if url and not url.startswith(("http://", "https://")):
+            url = f"https://www.youtube.com/watch?v={url}"
+        results.append({"title": item.get("title", "Untitled"), "url": url})
+    return results
 
 
 def resolve_output(folder: Path, info: dict, preset: DownloadPreset, started: float) -> Path | None:

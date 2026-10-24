@@ -8,7 +8,7 @@ from pathlib import Path
 from PyQt6.QtCore import QObject, QRunnable, pyqtSignal
 
 from src.services.audio_analysis import analyze_audio_file
-from src.services.audio_pitch import render_pitch_shift
+from src.services.audio_pitch import render_audio_clip
 
 
 class AudioToolSignals(QObject):
@@ -51,14 +51,9 @@ class RenderPitchWorker(QRunnable):
 
     def run(self) -> None:
         try:
-            out = render_pitch_shift(
-                self._job.source,
-                self._job.target,
-                self._job.semitones,
-                self._job.engine,
-                self._job.fmt,
-                self._job.tempo_ratio,
-            )
+            max_dur = 25.0 if self._job.is_preview else 0.0
+            opts = (self._job.engine, self._job.fmt, self._job.tempo_ratio, max_dur)
+            out = render_audio_clip(self._job.source, self._job.target, self._job.semitones, opts)
             self._signals.rendered.emit(str(out), self._job.is_preview)
         except Exception as exc:
             self._signals.error.emit(f"Pitch render failed: {exc}")

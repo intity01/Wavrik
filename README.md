@@ -1,48 +1,32 @@
-# Media Downloader PRO 2.1
+# Wavrik · Media Downloader PRO 2.1
 
 > [!NOTE]
-> **Language Policy**: The official documentation, design files, and project rules for Media Downloader PRO are maintained in Thai.
+> **Language Policy**: The official documentation, design files, and project rules for Wavrik / Media Downloader PRO are maintained in Thai.
 
-แอปเดสก์ท็อป Windows สำหรับดาวน์โหลดเสียง วิดีโอ และ playlist ด้วย flow ที่มองเห็นครบในหน้าเดียว:
+แอปเดสก์ท็อป Windows สำหรับดาวน์โหลดสื่อ วิเคราะห์คีย์ดนตรี/ความเร็ว (Key & BPM) และปรับแต่งคีย์/เทมโป (Pitch Shift & Time-Stretch) ด้วยสถาปัตยกรรม **Precision Pro-Utility**:
 
-**วางลิงก์ → เลือกชนิด/คุณภาพ → ดาวน์โหลด → เปิดไฟล์**
+**วางลิงก์ → เลือกชนิด/คุณภาพ → ดาวน์โหลด → วิเคราะห์คีย์/BPM → ปรับคีย์หรือเทมโปในสตูดิโอ**
 
 ## จุดเด่น
 
-- Download Options อยู่หน้า Downloads โดยตรง: Audio/Video, Format/Quality และ Save location
-- ตัวเลือกส่วนกลางใช้กับงานที่ยังไม่เริ่ม ทำให้ queue card ไม่เต็มไปด้วย dropdown ซ้ำ
-- Preset ใช้ภาษาคน เช่น `MP3 · 320 kbps` และ `MP4 · Up to 1080p`
-- เลือก Download engine ได้: `Auto` สำหรับเลือก route ตาม URL, `Native` สำหรับไฟล์ตรง/HLS/DASH ที่ไม่มี DRM และ `yt-dlp` สำหรับเว็บไซต์ที่ต้องใช้ compatibility extractor
-- Queue จำกัดจำนวนงานพร้อมกันจริง และแต่ละงานยกเลิกแยกกันได้
-- แสดงสถานะ เปอร์เซ็นต์ ความเร็ว ETA และ processing
-- History เก็บ path/ขนาดไฟล์จริง พร้อมบอกเมื่อไฟล์ถูกย้ายหรือลบ
-- รองรับ playlist, import `.txt`, clipboard detection และ dark/light theme
-- ตรวจ GitHub Releases ใน background และแจ้งเมื่อมี version ใหม่
-- ดาวน์โหลด package ในแอปได้เฉพาะ immutable release ที่มี SHA-256 digest; โปรแกรมไม่รัน installer อัตโนมัติ
-- Design system แบบ solid surface ไม่มี gradient, glow, glassmorphism หรือ emoji functional icon
+- **Downloads (Compact Command Toolbar)**: แถบตั้งค่า Media Type, Format/Quality, Engine (`Auto` / `Native` / `yt-dlp`) และ Save Folder ในระนาบเดียว พร้อมตารางคิวงานที่กระชับและรองรับการลากไฟล์เข้าโดยตรง
+- **Library (Unified Media & Analysis Table)**: เก็บประวัติไฟล์จริง ขนาดไฟล์ และแคชผลวิเคราะห์ Key, Camelot Code, BPM และ Waveform ลงใน `history.json` ถาวร ไม่ต้องวิเคราะห์ซ้ำเมื่อเปิดโปรแกรมใหม่
+- **Audio Tools (Studio Inspector & Rack)**:
+  - วิเคราะห์ Key / Camelot Wheel (Essentia-compatible SpectralWhitening + HPCP + bgate profile) และ BPM (Multi-band Spectral Flux + Sparse Lag Autocorrelation)
+  - ปรับ Pitch Shift (`-12` ถึง `+12` semitones) และ Time-Stretch (`0.50x` ถึง `2.00x`) ด้วย Rubber Band R3 Finer Engine หรือ FFmpeg Formant Preserved
+  - แนะนำคีย์ผสมตามวงล้อ Camelot (`Match`, `Relative`, `+1 Boost`, `-1 Drop`) พร้อมปุ่มพรีวิวเสียง 25 วินาที และ Batch Processing
+- **Single-Locale UX (TH / EN)**: สลับภาษาไทยและอังกฤษได้ทันทีจากหน้า Settings โดยไม่ปนภาษา (No Tinglish)
+- **Precision Pro-Utility Design System**: พื้นผิว Graphite 4 ระดับ (`#0F1113` → `#14171A` → `#191D21` → `#1F252B`), ลำดับขั้นปุ่ม 4 ระดับ, ฟอนต์ Monospace สำหรับตัวเลขทางเทคนิค และปราศจาก gradient/glow/glassmorphism/emoji
 
 ## เริ่มใช้งานจาก source บน Windows
 
-1. แตกไฟล์โดยให้ `ffmpeg.exe` อยู่ข้าง `RunApp.bat`
+1. วาง `ffmpeg.exe` (และ `rubberband.exe` + `sndfile.dll` สำหรับ R3 Engine) ไว้ข้าง `RunApp.bat`
 2. ดับเบิลคลิก `RunApp.bat`
-3. ครั้งแรกสคริปต์จะสร้าง environment และติดตั้ง dependency ให้; ถ้า `.venv` เดิมเสีย สคริปต์จะตรวจพบและสร้างใหม่
-
-`RunApp.bat` จะตรวจสอบว่า `py -3` ใช้งานได้จริงก่อน แล้วจึง fallback ไปที่ `python` หรือ Python per-user ใต้ `%LocalAppData%` เพื่อรองรับเครื่องที่มี `py.exe` แต่ไม่มี interpreter ที่ลงทะเบียนไว้
-
-ผู้ใช้ทั่วไปควรใช้ GitHub Release ที่ build เป็น Windows package แล้ว เพื่อไม่ต้องติดตั้ง Python
+3. ครั้งแรกสคริปต์จะสร้าง `.venv` และติดตั้ง dependency อัตโนมัติ
 
 ## ตั้งค่า GitHub Updates
 
-Repository ที่ใช้ตรวจ update ต้องตั้งก่อนสร้าง release ใน:
-
-```python
-# Downloader/src/core/config.py
-GITHUB_REPO = "owner/repository"
-```
-
-เปลี่ยนเป็น `owner/repository` ของโปรเจกต์ก่อน build release จริง จากนั้นสร้าง release พร้อม Windows asset ชื่อที่มีคำว่า `Windows`, `x64`, `Setup` หรือ `Installer` เพื่อให้ updater เลือก asset ที่เหมาะสม
-
-รายละเอียดอยู่ที่ `docs/GITHUB_UPDATES.md`
+ตั้งค่า repository สำหรับตรวจสอบอัปเดตใน `Downloader/src/core/config.py` (`GITHUB_REPO = "owner/repository"`) ก่อนสร้าง release จริง ระบบรองรับเฉพาะ immutable release ที่มี SHA-256 digest และไม่รัน installer อัตโนมัติ
 
 ## สร้าง Windows release
 
@@ -52,9 +36,7 @@ build_windows.bat
 
 ผลลัพธ์อยู่ที่ `dist\MediaDownloaderPRO\MediaDownloaderPRO.exe`
 
-GitHub workflow ตัวอย่างอยู่ที่ `.github/workflows/release.yml`
-
-## ทดสอบ
+## ทดสอบและตรวจสอบคุณภาพโค้ด
 
 ```bash
 cd Downloader
@@ -66,16 +48,18 @@ ruff check src tests
 pytest -q
 ```
 
-## โครงสร้าง
+## โครงสร้างโปรเจกต์
 
-- `Downloader/src/core` — config, logging, runtime และ GitHub updater
-- `Downloader/src/domain` — typed presets, result models และ yt-dlp engine
-- `Downloader/src/services` — history และ platform actions
-- `Downloader/src/ui` — pages, components, theme และ background workers
-- `Downloader/tests` — regression, updater และ UI smoke tests
-- `PROJECT_RULES.md` — กฎ engineering/UX/security
-- `AI_SLOP_REVIEW.md` — automated + manual product UI review
-- `THIRD_PARTY_NOTICES.md` — ข้อควรตรวจสอบสำหรับ dependency และ binary ที่แจกจ่าย
+- `Downloader/src/core` — config, json_store, logger, URL parser, runtime discovery และ GitHub updater
+- `Downloader/src/domain` — typed models, presets, native HTTP/HLS downloader และ yt-dlp session engine
+- `Downloader/src/services` — DSP (BPM spectral flux, HPCP key detection, Camelot wheel, Rubber Band R3 / FFmpeg pitch & tempo rendering, batch processor), history manager และ platform actions
+- `Downloader/src/ui` — main window, single-locale i18n, Precision Graphite theme tokens/QSS, pages (`Downloads`, `Library`, `Audio Tools`, `Settings`), components และ background workers
+- `Downloader/tests` — automated unit, security, DSP และ UI regression test suite
+- `Downloader/tools` — static rule checker (`check_rules.py`) และ anti-AI-slop linter (`check_ai_slop.py`)
+- `PROJECT_RULES.md` — กฎวิศวกรรม ความปลอดภัย และขีดจำกัดขนาดโค้ด
+- `DESIGN.md` — มาตรฐานระบบการออกแบบ Precision Pro-Utility
+- `AI_SLOP_REVIEW.md` — เกณฑ์ตรวจสอบป้องกัน UI Slop
+- `THIRD_PARTY_NOTICES.md` — ข้อกำหนดสิทธิ์ใช้งานสำหรับ dependency และ binary ที่แจกจ่าย
 
 ## หมายเหตุด้านสิทธิ์ใช้งาน
 

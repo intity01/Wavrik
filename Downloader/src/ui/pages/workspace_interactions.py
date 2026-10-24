@@ -9,19 +9,27 @@ from src.ui.components.banners import ClipboardBanner, PlaylistBanner, UpdateBan
 class WorkspaceInteractionMixin:
     def _onPlaylistDetected(self, url: str, title: str, count: int, entries: list) -> None:
         self._removeCard(url)
+        current = getattr(self, "_playlistBanner", None)
+        if current:
+            current.deleteLater()
         banner = PlaylistBanner(title, count)
         urls = [item.get("url", "") for item in entries]
         banner.addAllRequested.connect(lambda: self.addUrls(urls))
         banner.dismissed.connect(banner.deleteLater)
         self.bannerArea.addWidget(banner)
+        self._playlistBanner = banner
 
     def showClipboardBanner(self, url: str) -> None:
         if normalizeUrl(url) in self._cards:
             return
+        current = getattr(self, "_clipboardBanner", None)
+        if current:
+            current.deleteLater()
         banner = ClipboardBanner(url)
         banner.addRequested.connect(self.addUrl)
         banner.dismissed.connect(banner.deleteLater)
         self.bannerArea.addWidget(banner)
+        self._clipboardBanner = banner
 
 
     def showUpdateBanner(self, info, view_callback) -> None:

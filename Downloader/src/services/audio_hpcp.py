@@ -43,7 +43,8 @@ def extract_key_candidates(samples: list[float], sr: int = 16000) -> list[dict]:
 
 def extract_key_and_sections(samples: list[float], sr: int = 16000) -> tuple[list[dict], str, str]:
     padded = [0.0] * (_N // 2) + samples + [0.0] * (_N // 2)
-    starts = list(range(0, max(1, len(padded) - _N + 1), _N))
+    stride = _N if len(padded) <= 64 * _N else max(_N, (len(padded) - _N) // 64)
+    starts = list(range(0, max(1, len(padded) - _N + 1), stride))
     hp1, hp2, mid = [0.0] * 12, [0.0] * 12, max(1, len(starts) // 2)
     for idx in range(0, len(starts), 2):
         s1 = starts[idx]

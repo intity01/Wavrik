@@ -11,9 +11,6 @@ from PyQt6.QtWidgets import QApplication
 from . import qss_base, qss_controls, qss_layout
 from .tokens import ACCENT, palette
 
-if sys.platform == "darwin":
-    from . import qss_macos
-
 _FONT_LOADED = False
 
 
@@ -32,9 +29,6 @@ def applyTheme(window, config=None) -> None:
         + qss_layout.build(tokens, accent)
     )
 
-    if sys.platform == "darwin":
-        styles += qss_macos.build(tokens, accent)
-
     window.setStyleSheet(styles)
     window.style().unpolish(window)
     window.style().polish(window)
@@ -48,25 +42,12 @@ def getFont(size: int = 10, isBold: bool = False) -> QFont:
     _load_font()
     if "Inter" in QFontDatabase.families():
         family = "Inter"
-    elif sys.platform == "darwin":
-        # San Francisco - macOS system font with proper weights
-        family = ".SF Pro Text"
     elif sys.platform == "win32":
         family = "Segoe UI"
     else:
         family = "Sans Serif"
     font = QFont(family, size)
     font.setBold(isBold)
-    
-    # macOS-specific font rendering optimizations
-    if sys.platform == "darwin":
-        # Enable antialiasing for crisp text
-        font.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
-        # Use subpixel positioning for better quality
-        font.setStyleHint(QFont.StyleHint.SansSerif, QFont.StyleStrategy.PreferQuality)
-        # Enable hinting for better readability at small sizes
-        font.setHintingPreference(QFont.HintingPreference.PreferFullHinting)
-    
     return font
 
 
