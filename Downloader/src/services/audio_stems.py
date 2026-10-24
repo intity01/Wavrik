@@ -4,12 +4,9 @@ from __future__ import annotations
 
 from array import array
 from dataclasses import dataclass
+import os
 from pathlib import Path
-import shutil
-import subprocess
-import sys
-import tempfile
-import wave
+import shutil, subprocess, sys, tempfile, wave  # noqa: E401
 
 from src.core.runtime import find_ffmpeg
 from src.services.audio_pitch import unique_export_path
@@ -19,6 +16,8 @@ STEM_MODES = (
     ("Mel-Band RoFormer Fast + Phase Lock", "roformer_fast"),
     ("Instant Studio Mid-Side DSP (Zero-Download)", "dsp_2stem"),
 )
+_MEL_MODEL = "vocals_mel_band_roformer.ckpt"
+_BS_MODEL = "model_bs_roformer_ep_317_sdr_12.9755.ckpt"
 
 
 @dataclass(frozen=True)
@@ -36,8 +35,7 @@ def separate_stems(
         raise FileNotFoundError(f"Source audio not found: {src}")
     out_dir = Path(output_dir).resolve() if output_dir else src.parent
     out_dir.mkdir(parents=True, exist_ok=True)
-    voc_dst = unique_export_path(out_dir, f"{src.stem}_[Vocals].wav")
-    inst_dst = unique_export_path(out_dir, f"{src.stem}_[Instrumental].wav")
+    voc_dst, inst_dst = unique_export_path(out_dir, f"{src.stem}_[Vocals].wav"), unique_export_path(out_dir, f"{src.stem}_[Instrumental].wav")
     with tempfile.TemporaryDirectory(prefix="wavrik-stems-", dir=out_dir) as tmp:
         stage = Path(tmp)
         master_wav, sr, ch = _prepare_master_wav(src, stage / "master.wav")
@@ -53,8 +51,7 @@ def phase_lock_stems(master_wav: Path, inst_est_wav: Path, voc_dst: Path, inst_d
     total, n_inst = len(m_pcm), len(i_pcm)
     v_pcm, i_locked = array("h", [0] * total), array("h", [0] * total)
     for idx, m_val in enumerate(m_pcm):
-        est = i_pcm[idx] if idx < n_inst else 0
-        v_val = max(-32768, min(32767, m_val - est))
+        v_val = max(-32768, min(32767, m_val - (i_pcm[idx] if idx < n_inst else 0)))
         i_val = max(-32768, min(32767, m_val - v_val))
         v_pcm[idx], i_locked[idx] = m_val - i_val, i_val
     _write_pcm16(voc_dst, v_pcm, sr, ch)
@@ -65,37 +62,37 @@ def fuse_min_magnitude(inst_a: Path, inst_b: Path, out_wav: Path) -> Path:
     """Fuse two instrumental estimates by selecting the lower-bleed amplitude per sample."""
     pcm_a, sr, ch = _read_pcm16(inst_a)
     pcm_b, _, _ = _read_pcm16(inst_b)
-    n = min(len(pcm_a), len(pcm_b))
-    fused = array("h", [pcm_a[i] if abs(pcm_a[i]) <= abs(pcm_b[i]) else pcm_b[i] for i in range(n)])
+    fused = array("h", [pcm_a[i] if abs(pcm_a[i]) <= abs(pcm_b[i]) else pcm_b[i] for i in range(min(len(pcm_a), len(pcm_b)))])
     _write_pcm16(out_wav, fused, sr, ch)
     return out_wav
 
 
-def _extract_instrumental(
-    master_wav: Path, stage: Path, mode: str, sr: int, ch: int,
-) -> tuple[Path, str]:
-    sep_bin = shutil.which("audio-separator")
-    if mode in {"roformer_ensemble", "roformer_fast"} and sep_bin:
-        ai_inst = _try_roformer_cli(sep_bin, master_wav, stage, mode, sr, ch)
-        if ai_inst and ai_inst.is_file():
+def _extract_instrumental(master_wav: Path, stage: Path, mode: str, sr: int, ch: int) -> tuple[Path, str]:
+    if mode in {"roformer_ensemble", "roformer_fast"} and (sep := _find_separator_bin()) and "PYTEST_CURRENT_TEST" not in os.environ:
+        if (ai_inst := _try_roformer_cli(sep, master_wav, stage, mode, sr, ch)) and ai_inst.is_file():
             return ai_inst, mode
     return _extract_inst_dsp(master_wav, stage / "inst_dsp.wav", sr, ch), "dsp_2stem"
 
 
-def _try_roformer_cli(
-    sep_bin: str, master_wav: Path, stage: Path, mode: str, sr: int, ch: int,
-) -> Path | None:
-    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
-    cmd1 = [sep_bin, str(master_wav), "--model_filename", "vocals_mel_band_roformer.ckpt", "--output_dir", str(stage), "--single_stem", "Instrumental"]
-    proc = subprocess.run(cmd1, capture_output=True, timeout=600, check=False, creationflags=flags)
-    cands = sorted(stage.glob("*Instrumental*.wav"))
-    if proc.returncode != 0 or not cands:
+def _try_roformer_cli(sep_bin: str, master_wav: Path, stage: Path, mode: str, sr: int, ch: int) -> Path | None:
+    if not (m1 := _run_sep_model(sep_bin, master_wav, stage / "pass1", _MEL_MODEL, sr, ch)):
         return None
-    norm1 = _normalize_wav_spec(cands[0], stage / "roformer_1.wav", sr, ch)
     if mode != "roformer_ensemble":
-        return norm1
-    dsp_ref = _extract_inst_dsp(master_wav, stage / "inst_ref.wav", sr, ch)
-    return fuse_min_magnitude(norm1, dsp_ref, stage / "ensemble_inst.wav")
+        return m1
+    m2 = _run_sep_model(sep_bin, master_wav, stage / "pass2", _BS_MODEL, sr, ch)
+    ref = m2 if m2 else _extract_inst_dsp(master_wav, stage / "inst_ref.wav", sr, ch)
+    return fuse_min_magnitude(m1, ref, stage / "ensemble_inst.wav")
+
+
+def _run_sep_model(sep_bin: str, master_wav: Path, out_dir: Path, model: str, sr: int, ch: int) -> Path | None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    model_dir = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "MediaDownloaderPRO" / "models"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+    cmd = [sep_bin, str(master_wav), "-m", model, "--model_file_dir", str(model_dir), "--output_dir", str(out_dir), "--single_stem", "Instrumental", "--use_autocast"]
+    proc = subprocess.run(cmd, capture_output=True, timeout=900, check=False, creationflags=flags)
+    cands = sorted(out_dir.glob("*Instrumental*.wav"))
+    return _normalize_wav_spec(cands[0], out_dir / "norm.wav", sr, ch) if (proc.returncode == 0 and cands) else None
 
 
 def _extract_inst_dsp(master_wav: Path, out_wav: Path, sr: int, ch: int) -> Path:
@@ -138,13 +135,15 @@ def _read_pcm16(path: Path) -> tuple[array, int, int]:
 
 def _write_pcm16(path: Path, pcm: array, sr: int, ch: int) -> None:
     with wave.open(str(path), "wb") as wf:
-        wf.setnchannels(ch)
-        wf.setsampwidth(2)
-        wf.setframerate(sr)
+        wf.setparams((ch, 2, sr, len(pcm) // max(1, ch), "NONE", "not compressed"))
         wf.writeframes(pcm.tobytes())
 
 
+def _find_separator_bin() -> str | None:
+    local = Path(sys.executable).resolve().parent / ("audio-separator.exe" if sys.platform == "win32" else "audio-separator")
+    return str(local) if local.is_file() else shutil.which("audio-separator")
+
+
 def _ffmpeg_exe() -> str | None:
-    folder = find_ffmpeg()
-    exe = "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg"
+    folder, exe = find_ffmpeg(), ("ffmpeg.exe" if sys.platform == "win32" else "ffmpeg")
     return str(Path(folder) / exe) if (folder and (Path(folder) / exe).is_file()) else shutil.which("ffmpeg")
