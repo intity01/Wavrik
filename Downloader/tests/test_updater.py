@@ -7,10 +7,11 @@ from src.core.updater import API_VERSION, UpdateError, UpdateManager
 
 
 class FakeResponse:
-    def __init__(self, *, data=None, content=b"", url="https://api.github.com/"):
+    def __init__(self, *, data=None, content=b"", url="https://api.github.com/", status_code=200):
         self._data = data
         self._content = content
         self.url = url
+        self.status_code = status_code
         self.headers = {"content-length": str(len(content))}
 
     def raise_for_status(self):
@@ -66,6 +67,12 @@ def test_update_check_parses_verified_release_and_api_headers():
     assert info.can_download_safely
     assert info.asset and info.asset.name.endswith(".exe")
     assert session.calls[0][1]["headers"]["X-GitHub-Api-Version"] == API_VERSION
+
+
+def test_repository_without_releases_reports_no_update():
+    session = FakeSession(FakeResponse(data={"message": "Not Found"}, status_code=404))
+    manager = UpdateManager("2.1.0", "owner/repo", session=session)
+    assert manager.checkForUpdates() is None
 
 
 def test_equal_version_with_shorter_semver_is_not_an_update():

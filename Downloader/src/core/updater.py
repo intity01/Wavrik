@@ -80,8 +80,9 @@ class UpdateManager:
                 headers=self._headers(),
                 timeout=(5, 15),
             )
-            response.raise_for_status()
-            data = response.json()
+            if response.status_code != 404:  # 404 = the repository has no published release yet
+                response.raise_for_status()
+            data = response.json() if response.status_code != 404 else {}
         except (requests.RequestException, ValueError) as exc:
             self._log_warning(exc)
             raise UpdateError("Could not check GitHub for updates. Check your connection and try again.") from exc

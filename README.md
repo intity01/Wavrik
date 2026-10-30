@@ -27,7 +27,7 @@
 
 ## ตั้งค่า GitHub Updates
 
-ตั้งค่า repository สำหรับตรวจสอบอัปเดตใน `Downloader/src/core/config.py` (`GITHUB_REPO = "owner/repository"`) ก่อนสร้าง release จริง ระบบรองรับเฉพาะ immutable release ที่มี SHA-256 digest และไม่รัน installer อัตโนมัติ
+แอปตรวจสอบอัปเดตจาก GitHub Releases ของ `intity01/Wavrik` (ตั้งไว้ที่ `GITHUB_REPO` ใน `Downloader/src/core/config.py`) ถ้า fork ไปเผยแพร่เอง ให้เปลี่ยนค่านี้เป็น repository ของคุณก่อนสร้าง release ระบบรองรับเฉพาะ immutable release ที่มี SHA-256 digest และไม่รัน installer อัตโนมัติ
 
 ## สร้าง Windows release
 
