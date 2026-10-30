@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from src.ui.i18n import tr
@@ -79,9 +82,12 @@ def _brand_header(sub_label: QLabel) -> QFrame:
     lay.setSpacing(1)
     top = QHBoxLayout()
     top.setContentsMargins(0, 0, 0, 0)
-    top.setSpacing(3)
-    top.addWidget(QLabel("WAVRIK", objectName="BrandTitle"))
-    top.addWidget(QLabel("●", objectName="BrandDot"))
+    top.setSpacing(8)
+    logo = QLabel(objectName="BrandLogo")
+    logo.setPixmap(QIcon(str(Path(__file__).parents[2] / "core" / "app.ico")).pixmap(24, 24))
+    logo.setAccessibleName("Wavrik")
+    top.addWidget(logo)
+    top.addWidget(QLabel("Wavrik", objectName="BrandTitle"))
     top.addStretch(1)
     lay.addLayout(top)
     sub_label.setText(tr("brand.subtitle", "en"))

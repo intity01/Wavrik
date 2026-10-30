@@ -55,9 +55,14 @@ class SettingsInterface(QWidget):
         index = next((i for i in range(self.languageCombo.count()) if self.languageCombo.itemData(i) == current), 0)
         self.languageCombo.setCurrentIndex(index)
         self.languageCombo.currentIndexChanged.connect(self._save_language)
-        self.themeValueLabel = QLabel("Precision Graphite · Teal Accent", objectName="MutedText")
+        self.themeCombo = ComboBox()
+        self.themeCombo.setMaximumWidth(240)
+        for data in ("light", "dark"):
+            self.themeCombo.addItem(tr(f"set.theme_{data}", current), data)
+        self.themeCombo.setCurrentIndex(max(0, self.themeCombo.findData(self._cfg.get("theme", "light"))))
+        self.themeCombo.currentIndexChanged.connect(self._save_theme)
         row_lang, self.lblLang = _row("Interface language", self.languageCombo)
-        row_theme, self.lblTheme = _row("Color surface", self.themeValueLabel)
+        row_theme, self.lblTheme = _row("Theme", self.themeCombo)
         layout.addLayout(row_lang)
         layout.addLayout(row_theme)
         return card
@@ -96,6 +101,8 @@ class SettingsInterface(QWidget):
         self.appHeading.setText(tr("set.appearance", lang))
         self.lblLang.setText(tr("set.lang_label", lang))
         self.lblTheme.setText(tr("set.theme_label", lang))
+        for i in range(self.themeCombo.count()):
+            self.themeCombo.setItemText(i, tr(f"set.theme_{self.themeCombo.itemData(i)}", lang))
         self.queueHeading.setText(tr("set.queue", lang))
         self.queueHint.setText(tr("set.queue_hint", lang))
         self.lblConcurrent.setText(tr("set.concurrent_label", lang))
@@ -107,6 +114,10 @@ class SettingsInterface(QWidget):
         lang = str(self.languageCombo.currentData() or "th")
         self._save("language", lang)
         self.languageChanged.emit(lang)
+
+    def _save_theme(self) -> None:
+        self._save("theme", str(self.themeCombo.currentData() or "light"))
+        self.themeChanged.emit()
 
     def _save_concurrency(self, value: int) -> None:
         self._save("maxConcurrentDownloads", value)

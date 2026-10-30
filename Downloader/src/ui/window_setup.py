@@ -47,18 +47,12 @@ def initialize(window, dependencies: WindowDependencies) -> None:
     window.setMinimumSize(760, 600)
     window.resize(1120, 760)
     _set_icon(window)
-    _sync_first_run_appearance(window)
     window._build_shell()
     window._build_pages()
     window._build_navigation()
     window._refresh_theme()
     window._setup_clipboard()
     window._schedule_update_check()
-
-
-def _sync_first_run_appearance(window: Any) -> None:
-    if getattr(window, "_cfg", None):
-        window._cfg.set("theme", "dark")
 
 
 def _set_icon(window) -> None:

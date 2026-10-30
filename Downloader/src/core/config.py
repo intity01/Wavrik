@@ -18,8 +18,8 @@ def _default_language() -> str:
 
 DEFAULT_SETTINGS = {
     "schemaVersion": 2,
-    "theme": "dark",
-    "accentColor": "#2BC3B0",
+    "theme": "light",
+    "accentColor": "#0E1116",
     "language": _default_language(),
     "downloadPath": str(Path.home() / "Downloads" / "Wavrik"),
     "defaultPreset": "audio_best",
@@ -39,6 +39,7 @@ DEFAULT_SETTINGS = {
     "maxSleepInterval": 10,
 }
 _LANGUAGES = {"th", "en"}
+_THEMES = {"light", "dark"}
 
 
 class Config:
@@ -77,7 +78,7 @@ class Config:
             self._store.backup()
             return dict(DEFAULT_SETTINGS)
         settings["schemaVersion"] = DEFAULT_SETTINGS["schemaVersion"]
-        settings["theme"] = "dark"
+        settings["theme"] = settings.get("theme") if settings.get("theme") in _THEMES else DEFAULT_SETTINGS["theme"]
         settings["accentColor"] = DEFAULT_SETTINGS["accentColor"]
         lang = settings.get("language")
         settings["language"] = lang if lang in _LANGUAGES else DEFAULT_SETTINGS["language"]

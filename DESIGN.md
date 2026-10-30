@@ -1,4 +1,4 @@
-# Design System — Precision Pro-Utility (Wavrik 2.1)
+# Design System — Wavrik Key Colors (Wavrik 2.1)
 
 ## Product scene
 
@@ -6,28 +6,31 @@
 
 ## Design direction
 
-ใช้แนวทาง **Precision Pro-Utility** (แรงบันดาลใจจาก Linear, Ableton Live, FabFilter):
-- ลำดับชั้นพื้นผิว 4 ระดับด้วยความสว่าง (Luminance Stepping) และเส้นขอบ 1px
-- จำกัดพื้นที่สี Accent (`#2BC3B0`) ไม่เกิน 5% ของหน้าจอ เฉพาะ Primary CTA, Active Navigation Indicator, Focus Ring และ Playhead
+ใช้แนวทาง **Wavrik Key Colors**: ธีมสว่างมินิมอลเป็นค่าเริ่มต้น ปุ่มหลักเป็นสีหมึก และสีสันบนหน้าจอมาจากข้อมูลเสียงเท่านั้น
+- ทุกตำแหน่งบนวงล้อ Camelot (1–12) มีสีประจำของตัวเอง ใช้ร่วมกันทั้งคีย์ไมเนอร์ (A) และเมเจอร์ (B) ของตำแหน่งนั้น
+- สีคีย์ใช้กับป้ายคีย์ (`StepBadge[keyIndex]`), waveform ส่วนที่เล่นแล้ว และไอคอนแอป ห้ามใช้เป็นสีตกแต่งทั่วไป
+- รหัสคีย์ (เช่น `8A`) ต้องแสดงเป็นข้อความเสมอ สีเป็นข้อมูลเสริม ไม่ใช่ข้อมูลเดียว
 - ใช้ฟอนต์ Monospace (`Consolas` / `JetBrains Mono`) กับตัวเลขทางเทคนิคทั้งหมด (Key, Camelot, BPM, Semitones, Ratio, เปอร์เซ็นต์, ขนาดไฟล์)
-- ห้ามใช้ gradient, glow, glassmorphism, เงาฟุ้ง หรือการวางการ์ดซ้อนการ์ด (No Card-in-Card)
+- ห้ามใช้ gradient, glow, glassmorphism, เงาฟุ้ง หรือการวางการ์ดซ้อนการ์ด (No Card-in-Card) ใน UI
 
-## Semantic palette (Precision Graphite)
+## Semantic palette
 
-- Level 0 App Shell (`bg`): `#0F1113`
-- Level 1 Sidebar & Workspace (`panel`): `#14171A`
-- Level 2 Rack Module / Row (`surface`): `#191D21`
-- Level 3 Input Well / Hover (`hover` / `input`): `#1F252B` / `#111417`
-- Border (`border` / `border_strong`): `#262C33` / `#363F49`
-- Text (`text` / `muted`): `#ECEFF4` / `#8A94A2`
-- Accent (`ACCENT`): `#2BC3B0`
-- Status: Success `#2EA043`, Warning `#D29922`, Danger `#F85149`
+`src/ui/theme/tokens.py` มี `LIGHT` (ค่าเริ่มต้น) และ `DARK` สลับได้จากหน้า Settings
 
-สีทั้งหมดเรียกผ่าน semantic tokens ใน `src/ui/theme/tokens.py` เท่านั้น
+- Light: `bg` `#F6F7F9`, `panel`/`surface` `#FFFFFF`, `border` `#E4E7EC`/`#CDD2DA`, `text` `#0E1116`, `muted` `#3D4552`, `accent` (หมึก) `#0E1116`
+- Dark: `bg` `#0F1113`, `panel` `#14171A`, `surface` `#191D21`, `border` `#262C33`/`#36404A`, `text` `#F1F5F9`, `accent` `#F1F5F9`
+- Key hues (`KEY_HUES`, ตำแหน่ง 1→12): `#2BB3A3` `#3BAA5C` `#7DB63A` `#C9B227` `#E39A2A` `#E5713A` `#E0554F` `#D9497F` `#B04FBF` `#7D5CD6` `#4C72DB` `#2F9BD6`
+- พื้นป้ายคีย์ใช้ `key_tint()` ผสมสีคีย์กับพื้นผิว เพื่อให้ตัวอักษรสีหมึกอ่านได้ (contrast ≥ 4.5:1)
+
+สีทั้งหมดเรียกผ่าน semantic tokens ใน `src/ui/theme/tokens.py` และ `key_colors.py` เท่านั้น
+
+## App icon
+
+มาสคอต **วาวี่ (Wavi)**: ตัวสีขาวที่มีหงอนเป็นแท่ง waveform 5 แท่ง บนพื้นสีคีย์ 8A (`#D9497F`) ต้นฉบับอยู่ที่ `Downloader/assets/icon/wavrik.svg` สร้าง `src/core/app.ico` (16–256 px) ด้วย `python tools/build_icon.py`
 
 ## 4-Tier Button Hierarchy
 
-1. **Tier 1 (`PrimaryButton`)**: เติมสี `#2BC3B0` ตัวอักษรเข้ม `#0B0E11` — มีได้เพียงปุ่มหลักเดียวต่อมุมมอง (`Add to queue`, `Export Audio`)
+1. **Tier 1 (`PrimaryButton`)**: เติมสี accent (หมึก `#0E1116` ในธีมสว่าง) ตัวอักษรสีพื้น — มีได้เพียงปุ่มหลักเดียวต่อมุมมอง (`Add to queue`, `Export Audio`)
 2. **Tier 2 (`SecondaryButton`)**: พื้น `#1F252B` ขอบ `#363F49` — สำหรับคำสั่งรอง (`Download all`, `Preview Shifted`, `Batch Process...`)
 3. **Tier 3 (`GhostButton` / `IconActionButton`)**: พื้นโปร่งใส ขอบบาง — สำหรับคำสั่งระดับแถว (`Folder`, `Audio Tools`, `×2`, `÷2`, `Import .txt`)
 4. **Tier 4 (`DangerButton`)**: พื้นโปร่งใส ขอบและตัวอักษรสีแดง `#F85149` — สำหรับการลบหรือล้างประวัติ (`Clear history`)
@@ -85,7 +88,7 @@
 
 ## Settings information architecture
 
-- Appearance: theme และ accent
+- Appearance: ภาษาและธีม (สว่าง/มืด)
 - Queue: concurrency เท่านั้น
 - Behavior: clipboard/tray
 - Software updates: current version, startup preference, check state, release action, verified download state

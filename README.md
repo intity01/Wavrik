@@ -16,7 +16,8 @@
   - ปรับ Pitch Shift (`-12` ถึง `+12` semitones) และ Time-Stretch (`0.50x` ถึง `2.00x`) ด้วย Rubber Band R3 Finer Engine หรือ FFmpeg Formant Preserved
   - แนะนำคีย์ผสมตามวงล้อ Camelot (`Match`, `Relative`, `+1 Boost`, `-1 Drop`) พร้อมปุ่มพรีวิวเสียง 25 วินาที และ Batch Processing
 - **Single-Locale UX (TH / EN)**: สลับภาษาไทยและอังกฤษได้ทันทีจากหน้า Settings โดยไม่ปนภาษา (No Tinglish)
-- **Precision Pro-Utility Design System**: พื้นผิว Graphite 4 ระดับ (`#0F1113` → `#14171A` → `#191D21` → `#1F252B`), ลำดับขั้นปุ่ม 4 ระดับ, ฟอนต์ Monospace สำหรับตัวเลขทางเทคนิค และปราศจาก gradient/glow/glassmorphism/emoji
+- **Wavrik Key Colors Design System**: ธีมสว่างเป็นค่าเริ่มต้น สลับเป็นธีมมืดได้ ทุกคีย์บนวงล้อ Camelot มีสีประจำของตัวเอง ใช้กับป้ายคีย์และ waveform มีมาสคอตไอคอน "วาวี่" ลำดับขั้นปุ่ม 4 ระดับ และฟอนต์ Monospace สำหรับตัวเลขทางเทคนิค
+- **โอเพนซอร์ส GPL-3.0**: ใช้ฟรี แก้ไขและแจกจ่ายต่อได้ภายใต้เงื่อนไขของ GPL-3.0 (ดู `LICENSE`)
 
 ## เริ่มใช้งานจาก source บน Windows
 

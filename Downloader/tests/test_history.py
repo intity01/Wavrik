@@ -41,8 +41,15 @@ def test_invalid_settings_are_recovered(tmp_path: Path):
         encoding="utf-8",
     )
     config = Config(app_data)
-    assert config.get("theme") == "dark"
+    assert config.get("theme") == "light"
     assert config.get("maxConcurrentDownloads") == 2
+
+
+def test_saved_dark_theme_is_kept(tmp_path: Path):
+    app_data = tmp_path / "appdata"
+    app_data.mkdir()
+    (app_data / "settings.json").write_text('{"schemaVersion": 2, "theme": "dark"}', encoding="utf-8")
+    assert Config(app_data).get("theme") == "dark"
 
 
 def test_invalid_settings_root_is_backed_up(tmp_path: Path):
@@ -51,5 +58,5 @@ def test_invalid_settings_root_is_backed_up(tmp_path: Path):
     settings = app_data / "settings.json"
     settings.write_text("[]", encoding="utf-8")
     config = Config(app_data)
-    assert config.get("theme") == "dark"
+    assert config.get("theme") == "light"
     assert settings.with_suffix(".json.corrupt").exists()
