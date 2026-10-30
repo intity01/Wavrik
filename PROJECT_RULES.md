@@ -77,7 +77,7 @@
 
 ## Visual design
 
-- **ห้าม gradient ทุกชนิด** ใน QSS/CSS/asset ที่สร้างเพื่อ UI
+- **ห้าม gradient ทุกชนิด** ใน QSS/CSS/asset ที่สร้างเพื่อ UI ข้อยกเว้นเดียวคือไอคอนแอป (`Downloader/assets/icon/*.svg` → `app.ico`) ซึ่งเป็นภาพแบรนด์ ไม่ใช่ส่วนประกอบของ UI
 - ห้าม accent glow, glassmorphism, blur และ colored drop shadow
 - component/page ห้ามมี inline stylesheet ที่กำหนดสี
 - สีอยู่ใน semantic token files เท่านั้น ยกเว้นข้อมูลตัวเลือก accent

@@ -1,4 +1,6 @@
-"""Render assets/icon/wavrik.svg into the multi-size Windows icon at src/core/app.ico.
+"""Render assets/icon/wavrik*.svg into the multi-size Windows icon at src/core/app.ico.
+
+Sizes up to SMALL_MAX use wavrik-small.svg (bigger eyes, no cheeks or mouth) so the face stays legible.
 
 Run from the Downloader folder after changing the SVG:
     python tools/build_icon.py
@@ -16,8 +18,10 @@ from PyQt6.QtSvg import QSvgRenderer
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "assets" / "icon" / "wavrik.svg"
+SMALL_SOURCE = ROOT / "assets" / "icon" / "wavrik-small.svg"
 TARGET = ROOT / "src" / "core" / "app.ico"
 SIZES = (16, 20, 24, 32, 40, 48, 64, 128, 256)
+SMALL_MAX = 32
 
 
 def render_png(renderer: QSvgRenderer, size: int) -> bytes:
@@ -52,11 +56,13 @@ def build_ico(pngs: list[tuple[int, bytes]]) -> bytes:
 
 def main() -> int:
     app = QGuiApplication.instance() or QGuiApplication(sys.argv[:1])
-    renderer = QSvgRenderer(str(SOURCE))
-    if not renderer.isValid():
-        sys.stderr.write(f"Cannot read {SOURCE}\n")
-        return 1
-    TARGET.write_bytes(build_ico([(s, render_png(renderer, s)) for s in SIZES]))
+    large, small = QSvgRenderer(str(SOURCE)), QSvgRenderer(str(SMALL_SOURCE))
+    for path, renderer in ((SOURCE, large), (SMALL_SOURCE, small)):
+        if not renderer.isValid():
+            sys.stderr.write(f"Cannot read {path}\n")
+            return 1
+    pngs = [(s, render_png(small if s <= SMALL_MAX else large, s)) for s in SIZES]
+    TARGET.write_bytes(build_ico(pngs))
     sys.stdout.write(f"Wrote {TARGET} ({', '.join(map(str, SIZES))} px)\n")
     del app
     return 0
