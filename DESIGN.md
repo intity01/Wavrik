@@ -26,7 +26,12 @@
 
 ## App icon
 
-มาสคอต **วาวี่ (Wavi)**: ตัวสีขาวที่มีหงอนเป็นแท่ง waveform 5 แท่ง บนพื้นสีคีย์ 8A (`#D9497F`) ต้นฉบับอยู่ที่ `Downloader/assets/icon/wavrik.svg` สร้าง `src/core/app.ico` (16–256 px) ด้วย `python tools/build_icon.py`
+มาสคอต **วาวี่ (Wavi)**: ตัวสีขาวที่มีหงอนเป็นแท่ง waveform 5 แท่ง บนพื้น gradient สีคีย์ 8A (`#EA9BB9` → `#D9497F`) ตัวไล่จากขาวไปชมพูอ่อน (`#F8DEE8`) มุมโค้ง 58/256
+
+- `Downloader/assets/icon/wavrik.svg`: ขนาด 40 px ขึ้นไป มีแก้ม ปาก และจุดสะท้อนในตา
+- `Downloader/assets/icon/wavrik-small.svg`: ขนาด 32 px ลงไป ตาใหญ่ขึ้น ไม่มีแก้มและปาก เพื่อให้อ่านออกบนแถบงานและถาดระบบ
+- สร้าง `src/core/app.ico` (16–256 px) ด้วย `python tools/build_icon.py` สคริปต์ตัดมุมโค้งเองเพราะ QtSvg ไม่รองรับ `clipPath`
+- gradient ใช้ได้เฉพาะไอคอนแอปเท่านั้น (ดู PROJECT_RULES)
 
 ## 4-Tier Button Hierarchy
 
