@@ -230,20 +230,27 @@ def test_completed_card_handles_missing_file(qtbot, config, logger, fake_downloa
     assert "no longer exists" in card._lblStatus.text().lower() or "moved" in card._lblStatus.text().lower()
 
 
-def test_phase1_dark_teal_palette_and_language_settings(qtbot, config, logger, fake_downloader, history):
-    from src.ui.theme.tokens import ACCENT, DARK, palette
+def test_key_color_palette_theme_switch_and_language_settings(qtbot, config, logger, fake_downloader, history):
+    from PyQt6.QtWidgets import QApplication
 
-    assert ACCENT == "#2BC3B0"
+    from src.ui.theme.tokens import ACCENT, DARK, LIGHT, palette
+
+    assert ACCENT == "#0E1116"
     assert DARK["bg"] == "#0F1113"
-    assert palette("light") == DARK
-    assert config.get("theme") == "dark"
-    assert config.get("accentColor") == "#2BC3B0"
+    assert palette("light") == LIGHT
+    assert palette("dark") == DARK
+    assert config.get("theme") == "light"
     assert config.get("checkUpdatesOnStartup") is False
 
     window = _window(qtbot, config, logger, fake_downloader, history)
-    assert not hasattr(window.pageSettings, "themeCombo")
+    assert QApplication.instance().property("appTheme") == "light"
     assert not hasattr(window.pageSettings, "accentCombo")
     assert hasattr(window.pageSettings, "languageCombo")
+    window.pageSettings.themeCombo.setCurrentIndex(window.pageSettings.themeCombo.findData("dark"))
+    assert config.get("theme") == "dark"
+    assert QApplication.instance().property("appTheme") == "dark"
+    window.pageSettings.themeCombo.setCurrentIndex(window.pageSettings.themeCombo.findData("light"))
+    assert QApplication.instance().property("appTheme") == "light"
 
     en_index = window.pageSettings.languageCombo.findData("en")
     window.pageSettings.languageCombo.setCurrentIndex(en_index)

@@ -9,8 +9,7 @@ def build(tokens: dict[str, str], accent: str) -> str:
     return f"""
     QMainWindow, QWidget#AppRoot, QStackedWidget {{ background: {tokens['bg']}; color: {tokens['text']}; }}
     QWidget {{ color: {tokens['text']}; font-family: "Inter", "Segoe UI", ".SF Pro Text"; font-size: 9.5pt; }}
-    QLabel#BrandTitle {{ font-size: 12pt; font-weight: 800; color: {tokens['text']}; letter-spacing: 0.8px; }}
-    QLabel#BrandDot {{ font-size: 12pt; font-weight: 900; color: {accent}; }}
+    QLabel#BrandTitle {{ font-size: 12pt; font-weight: 800; color: {tokens['text']}; }}
     QLabel#BrandSubtitle {{ font-size: 8pt; color: {tokens['text_subtle']}; }}
     QLabel#NavCategoryLabel {{ font-size: 7.5pt; font-weight: 700; color: {tokens['text_subtle']}; padding-left: 10px; padding-top: 10px; padding-bottom: 2px; letter-spacing: 0.6px; }}
     QLabel#PageTitle {{ font-size: 15pt; font-weight: 700; color: {tokens['text']}; letter-spacing: -0.3px; }}

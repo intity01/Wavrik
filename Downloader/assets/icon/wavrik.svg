@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <title>Wavrik · Wavi (flat)</title>
+  <defs><clipPath id="c"><rect width="256" height="256" rx="58"/></clipPath></defs>
+  <g clip-path="url(#c)">
+    <rect width="256" height="256" fill="#D9497F"/>
+    <circle cx="214" cy="40" r="72" fill="#E0638F"/>
+    <g fill="#FFFFFF">
+      <rect x="65" y="96" width="22" height="70" rx="11"/>
+      <rect x="91" y="62" width="22" height="104" rx="11"/>
+      <rect x="117" y="38" width="22" height="128" rx="11"/>
+      <rect x="143" y="68" width="22" height="98" rx="11"/>
+      <rect x="169" y="100" width="22" height="66" rx="11"/>
+      <ellipse cx="128" cy="252" rx="118" ry="124"/>
+    </g>
+    <path d="M30,256 C40,214 70,190 100,184 C70,206 62,232 64,256Z" fill="#F6D3E0"/>
+    <ellipse cx="74" cy="208" rx="13" ry="8" fill="#F59AB9"/>
+    <ellipse cx="182" cy="208" rx="13" ry="8" fill="#F59AB9"/>
+    <ellipse cx="102" cy="178" rx="16" ry="22" fill="#0E1116"/>
+    <ellipse cx="154" cy="178" rx="16" ry="22" fill="#0E1116"/>
+    <circle cx="108" cy="169" r="6" fill="#FFFFFF"/>
+    <circle cx="160" cy="169" r="6" fill="#FFFFFF"/>
+    <path d="M118,212q10,10 20,0" fill="none" stroke="#0E1116" stroke-width="7" stroke-linecap="round"/>
+  </g>
+</svg>

@@ -8,6 +8,7 @@ from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from src.services.platform_actions import open_parent, open_path
+from src.ui.theme.key_colors import apply_key_property, key_index
 
 from .controls import ElidedLabel, ToolButton
 
@@ -54,6 +55,7 @@ class LibraryCard(QWidget):
             _harmony_text(self._entry, self._analysis, self._is_audio_entry()),
             objectName="StepBadge" if self._analysis.get("key") else "NeutralBadge",
         )
+        self.harmonyBadge.setProperty("keyIndex", key_index(self._analysis.get("camelot", "")))
         lay.addWidget(self.harmonyBadge)
         lay.addStretch(1)
         return wrap
@@ -63,8 +65,7 @@ class LibraryCard(QWidget):
         self.metadata.setText(_metadata_text(self._entry, self._analysis))
         self.harmonyBadge.setText(_harmony_text(self._entry, self._analysis, self._is_audio_entry()))
         self.harmonyBadge.setObjectName("StepBadge" if self._analysis.get("key") else "NeutralBadge")
-        self.harmonyBadge.style().unpolish(self.harmonyBadge)
-        self.harmonyBadge.style().polish(self.harmonyBadge)
+        apply_key_property(self.harmonyBadge, self._analysis.get("camelot", ""))
 
     def _add_actions(self, row: QHBoxLayout) -> None:
         actions = QHBoxLayout()

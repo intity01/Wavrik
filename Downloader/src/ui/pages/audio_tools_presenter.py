@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel
 from src.services.audio_analysis import camelot_code, enharmonic_key, mirex_key_score, transpose_key
 from src.services.audio_stems import STEM_MODES
 from src.ui.components.controls import ComboBox, PushButton, ToolButton
+from src.ui.theme.key_colors import apply_key_property
 from src.ui.workers.stem_worker import StemSeparationWorker, StemSignals
 
 
@@ -35,7 +36,10 @@ def update_preview_labels(page) -> None:
     base_key, semitones = page.detectedKeyCombo.currentText() or "C major", page.semitoneSpin.value()
     shifted_key, enh, ratio = transpose_key(base_key, semitones), enharmonic_key(base_key), page._tempo_ratio()
     page.camelotLabel.setText(f"Camelot: {camelot_code(base_key)}" + (f" ({enh})" if enh != base_key else ""))
+    apply_key_property(page.camelotLabel, camelot_code(base_key))
+    page.waveformWidget.setKeyCamelot(camelot_code(base_key))
     page.resultingKeyLabel.setText(f"Resulting key: {shifted_key} ({camelot_code(shifted_key)}) · {f'+{semitones}' if semitones > 0 else semitones} st")
+    apply_key_property(page.resultingKeyLabel, camelot_code(shifted_key))
     page.tempoRatioLabel.setText(f"Stretch: {ratio:.2f}x ({ratio * 100:.0f}%)")
     if page._source:
         page.outputPreviewLabel.setText(f"Safe export copy: {page._export_name(str(page.formatCombo.currentData() or 'wav'))} (original untouched)")
