@@ -26,11 +26,14 @@ class StemSeparationWorker(QRunnable):
     def cancel(self) -> None:
         self._cancelled = True
 
+    def is_cancelled(self) -> bool:
+        return self._cancelled
+
     def run(self) -> None:
         if self._cancelled:
             return
         try:
-            res = separate_stems(self._source, self._output_dir, self._mode)
+            res = separate_stems(self._source, self._output_dir, self._mode, cancel_check=lambda: self._cancelled)
             if self._cancelled:
                 return
             self._signals.separated.emit(str(res.vocals_path), str(res.instrumental_path), res.mode_used)

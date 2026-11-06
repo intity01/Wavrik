@@ -6,10 +6,11 @@ import math
 import os
 from pathlib import Path
 import shutil
-import subprocess
 import sys
 import tempfile
+from typing import Any
 
+from src.core.process import is_cancellation_requested, run_cancellable_process
 from src.core.runtime import find_ffmpeg, find_rubberband
 
 _FORMATS = {
@@ -53,6 +54,7 @@ def render_pitch_shift(
 def render_audio_clip(
     source: str | Path, target: str | Path, semitones: int,
     options: tuple = ("r3_finer", "wav", 1.0, 0.0, 0.0),
+    cancel_check: Any = None,
 ) -> Path:
     engine, fmt, tempo_ratio, max_dur = options[:4]
     start_sec = float(options[4]) if len(options) > 4 else 0.0
@@ -64,11 +66,13 @@ def render_audio_clip(
         staged = Path(stage_dir) / f"output{_FORMATS.get(fmt, _FORMATS['wav'])[0]}"
         opts = (semitones, fmt, tempo_ratio, max_dur, start_sec, engine)
         if semitones == 0 and abs(tempo_ratio - 1.0) < 1e-4:
-            _encode_direct(ffmpeg_exe, src, staged, fmt, max_dur, start_sec)
+            _encode_direct(ffmpeg_exe, src, staged, opts, cancel_check)
         elif rb_exe:
-            _render_with_r3(ffmpeg_exe, rb_exe, src, staged, opts)
+            _render_with_r3(ffmpeg_exe, rb_exe, src, staged, opts, cancel_check)
         else:
-            _render_with_ffmpeg(ffmpeg_exe, src, staged, opts)
+            _render_with_ffmpeg(ffmpeg_exe, src, staged, opts, cancel_check)
+        if is_cancellation_requested(cancel_check):
+            raise RuntimeError("Audio rendering cancelled.")
         if not staged.is_file() or staged.stat().st_size <= 44:
             raise RuntimeError("Rendered output file was empty or invalid.")
         os.replace(staged, dst)
@@ -99,39 +103,37 @@ def _require_ffmpeg() -> str:
     return found
 
 
-def _encode_direct(
-    ffmpeg_exe: str, src: Path, dst: Path, fmt: str, max_dur: float = 0.0, start_sec: float = 0.0,
-) -> None:
+def _encode_direct(ffmpeg_exe: str, src: Path, dst: Path, opts: tuple, cancel_check: Any = None) -> None:
+    _, fmt, _, max_dur, start_sec, _ = opts
     codec = _FORMATS.get(fmt, _FORMATS["wav"])[1]
     seek, limit = (["-ss", f"{start_sec:.2f}"] if start_sec > 0 else []), (["-t", f"{max_dur:.1f}"] if max_dur > 0 else [])
-    _run_cmd([ffmpeg_exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", *seek, "-i", str(src), *limit, "-vn", *codec, str(dst)])
+    _run_cmd([ffmpeg_exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", *seek, "-i", str(src), *limit, "-vn", *codec, str(dst)], cancel_check)
 
 
-def _render_with_r3(ffmpeg_exe: str, rb_exe: str, src: Path, dst: Path, opts: tuple) -> None:
+def _render_with_r3(ffmpeg_exe: str, rb_exe: str, src: Path, dst: Path, opts: tuple, cancel_check: Any = None) -> None:
     semitones, fmt, tempo_ratio, max_dur, start_sec, engine = opts
     quiet, shifted, codec = dst.parent / "headroom_in.wav", dst.parent / "r3_shifted.wav", _FORMATS.get(fmt, _FORMATS["wav"])[1]
     seek, limit = (["-ss", f"{start_sec:.2f}"] if start_sec > 0 else []), (["-t", f"{max_dur:.1f}"] if max_dur > 0 else [])
     dur_ratio = f"{1.0 / max(0.5, min(2.0, tempo_ratio)):.6f}"
     r3_flags = ["-3", "--pitch-hq"] if engine == "r3_percussive" else ["-3", "-F", "--centre-focus"]
-    _run_cmd([ffmpeg_exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", *seek, "-i", str(src), *limit, "-vn", "-af", "volume=0.5", "-c:a", "pcm_f32le", str(quiet)])
-    _run_cmd([rb_exe, *r3_flags, "-t", dur_ratio, "-p", str(semitones), str(quiet), str(shifted)])
-    _run_cmd([ffmpeg_exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(shifted), "-vn", "-af", "volume=2.0,alimiter=limit=0.95:level=disabled", *codec, str(dst)])
+    _run_cmd([ffmpeg_exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", *seek, "-i", str(src), *limit, "-vn", "-af", "volume=0.5", "-c:a", "pcm_f32le", str(quiet)], cancel_check)
+    _run_cmd([rb_exe, *r3_flags, "-t", dur_ratio, "-p", str(semitones), str(quiet), str(shifted)], cancel_check)
+    _run_cmd([ffmpeg_exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(shifted), "-vn", "-af", "volume=2.0,alimiter=limit=0.95:level=disabled", *codec, str(dst)], cancel_check)
 
 
-def _render_with_ffmpeg(ffmpeg_exe: str, src: Path, dst: Path, opts: tuple) -> None:
+def _render_with_ffmpeg(ffmpeg_exe: str, src: Path, dst: Path, opts: tuple, cancel_check: Any = None) -> None:
     semitones, fmt, tempo_ratio, max_dur, start_sec, _ = opts
     ratio, codec = 2.0 ** (semitones / 12.0), _FORMATS.get(fmt, _FORMATS["wav"])[1]
     seek, limit = (["-ss", f"{start_sec:.2f}"] if start_sec > 0 else []), (["-t", f"{max_dur:.1f}"] if max_dur > 0 else [])
     filt = f"rubberband=tempo={tempo_ratio:.6f}:pitch={ratio:.8f}:pitchq=quality:channels=together:formant=preserved"
-    _run_cmd([ffmpeg_exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", *seek, "-i", str(src), *limit, "-vn", "-af", filt, *codec, str(dst)])
+    _run_cmd([ffmpeg_exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", *seek, "-i", str(src), *limit, "-vn", "-af", filt, *codec, str(dst)], cancel_check)
 
 
-def _run_cmd(cmd: list[str]) -> None:
-    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300, check=False, creationflags=flags)
+def _run_cmd(cmd: list[str], cancel_check: Any = None) -> None:
+    proc = run_cancellable_process(cmd, timeout=300, cancel_check=cancel_check)
     if proc.returncode != 0:
-        detail = (proc.stderr or proc.stdout or "Audio processing failed").strip().splitlines()[-1]
-        raise RuntimeError(detail)
+        lines = ((proc.stderr or "").strip() or (proc.stdout or "").strip() or "Audio processing failed").splitlines()
+        raise RuntimeError(lines[-1] if lines else "Audio processing failed")
 
 
 def _compact_key(key_name: str) -> str:

@@ -38,8 +38,7 @@ class AudioToolsInterface(QWidget):
         build_ui(self)
         self._set_controls_enabled(False)
 
-    def dragEnterEvent(self, event) -> None:
-        event.acceptProposedAction() if event.mimeData().hasUrls() else event.ignore()
+    def dragEnterEvent(self, event) -> None: event.acceptProposedAction() if event.mimeData().hasUrls() else event.ignore()
     def dropEvent(self, event) -> None:
         files = [Path(u.toLocalFile()) for u in event.mimeData().urls() if u.isLocalFile() and Path(u.toLocalFile()).is_file()]
         files and self.loadFile(files[0])
@@ -52,7 +51,8 @@ class AudioToolsInterface(QWidget):
         self._source, self._busy = cand, False
         self.transport.setSlotA(cand) or self.fileLabel.setText(f"{cand.name} ({cand.parent})")
         self._set_controls_enabled(True) or self._update_preview_labels()
-        self._on_analyzed(cached) if (cached and cached.get("key")) else self._reanalyze()
+        hit = cached if (cached and cached.get("key")) else (self._hist.getCachedAnalysis(cand) if (self._hist and hasattr(self._hist, "getCachedAnalysis")) else None)
+        self._on_analyzed(hit) if hit else self._reanalyze()
     def _choose_file(self) -> None:
         (sel := get_open_file_path(self, "Choose audio file", _AUDIO_FILTER, self._cfg.get("downloadPath", ""))) and self.loadFile(sel)
     def _open_batch_dialog(self) -> None:
@@ -72,6 +72,7 @@ class AudioToolsInterface(QWidget):
 
     def _on_analyzed(self, result: dict) -> None:
         self._busy = False
+        self._hist and self._source and hasattr(self._hist, "updateAnalysis") and self._hist.updateAnalysis(str(self._source), result)
         apply_analysis_result(self, result)
         self.analysisCompleted.emit(result)
 
@@ -81,15 +82,12 @@ class AudioToolsInterface(QWidget):
         0 <= i < len(self._harmonic_cands) and self.semitoneSpin.setValue(self._harmonic_cands[i]["semitones"])
     def _on_source_bpm_changed(self, value: float) -> None:
         self.targetBpmSpin.setValue(value) or self._update_preview_labels()
-    def _separate_stems(self) -> None:
-        start_stem_separation(self)
-    def _load_vocals_stem(self) -> None:
-        self._vocalsStem and self._vocalsStem.is_file() and self.loadFile(self._vocalsStem)
-    def _load_inst_stem(self) -> None:
-        self._instStem and self._instStem.is_file() and self.loadFile(self._instStem)
+    def _separate_stems(self) -> None: start_stem_separation(self)
+    def _load_vocals_stem(self) -> None: self._vocalsStem and self._vocalsStem.is_file() and self.loadFile(self._vocalsStem)
+    def _load_inst_stem(self) -> None: self._instStem and self._instStem.is_file() and self.loadFile(self._instStem)
     def _on_seek_requested(self, sec: float) -> None:
         self.statusLabel.setText(f"Playhead set to {int(sec // 60)}:{int(sec % 60):02d} (25s preview slice)")
-        self.transport.isPlaying() and self.transport.activeSlot() == "A" and self.transport.playSlot("A", sec)
+        self.transport.playSlot(self.transport.activeSlot(), sec) if self.transport.isPlaying() else self.transport.seek(sec)
     def _update_preview_labels(self, *_args) -> None:
         update_preview_labels(self)
     def _play_original(self) -> None:
@@ -134,6 +132,7 @@ class AudioToolsInterface(QWidget):
 
     def cleanup(self) -> None:
         self._busy = False
+        self.transport.stop()
         getattr(self, "_activeWorker", None) and hasattr(self._activeWorker, "cancel") and self._activeWorker.cancel()
         getattr(self, "_batchDialog", None) and hasattr(self._batchDialog, "_cancel_and_wait") and self._batchDialog._cancel_and_wait()
         self._pool.clear()

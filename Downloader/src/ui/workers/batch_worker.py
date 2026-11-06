@@ -35,10 +35,12 @@ class BatchAudioWorker(QRunnable):
                 break
             try:
                 known_key = self._keys.get(str(src), "C major")
-                process_batch_file(src, self._cfg, known_key)
+                process_batch_file(src, self._cfg, known_key, cancel_check=lambda: self._cancelled)
                 succeeded += 1
                 self._signals.itemProcessed.emit(idx + 1, total, src.name)
             except Exception as exc:
+                if self._cancelled:
+                    break
                 failed += 1
                 self._signals.error.emit(f"Failed {src.name}: {exc}")
         self._signals.finished.emit(succeeded, failed)
