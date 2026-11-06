@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from PyQt6.QtCore import QThreadPool, QTimer, pyqtSignal
@@ -26,6 +27,7 @@ class LibraryInterface(QWidget):
         super().__init__(parent)
         self._hist, self._cfg = historyManager, config
         self._limit, self._analysisCache, self._cardsByPath, self._bgSignals = 50, {}, {}, []
+        self._activeWorkers: list[AnalyzeAudioWorker] = []
         self._analysisPool, self._debounce = QThreadPool(self), QTimer(self, singleShot=True, interval=250)
         self._analysisPool.setMaxThreadCount(1)
         self._debounce.timeout.connect(self._apply_search)
@@ -59,25 +61,52 @@ class LibraryInterface(QWidget):
         p, key = Path(file_path), str(Path(file_path))
         if p.is_file() and p.suffix.lower() in AUDIO_EXTS and p.stat().st_size >= 100 and key not in self._analysisCache:
             signals = AudioToolSignals()
-            signals.analyzed.connect(self.storeAnalysisResult)
+            worker = AnalyzeAudioWorker(p, signals)
+            signals.analyzed.connect(lambda res, s=signals, w=worker: (self._cleanup_bg_job(s, w), self.storeAnalysisResult(res)))
+            signals.error.connect(lambda _err, s=signals, w=worker: self._cleanup_bg_job(s, w))
             self._bgSignals.append(signals)
-            self._analysisPool.start(AnalyzeAudioWorker(p, signals))
+            self._activeWorkers.append(worker)
+            self._analysisPool.start(worker)
+
+    def _cleanup_bg_job(self, sig: AudioToolSignals, worker: AnalyzeAudioWorker) -> None:
+        sig in self._bgSignals and self._bgSignals.remove(sig)
+        worker in self._activeWorkers and self._activeWorkers.remove(worker)
 
     def storeAnalysisResult(self, result: dict) -> None:
         if (fp := str(result.get("filePath") or "")):
+            while len(self._analysisCache) >= 500:
+                self._analysisCache.pop(next(iter(self._analysisCache)), None)
             self._analysisCache[fp] = result
             if hasattr(self._hist, "updateAnalysis"):
                 self._hist.updateAnalysis(fp, result)
             if fp in self._cardsByPath:
                 self._cardsByPath[fp].setAnalysisResult(result)
 
+    def cleanup(self) -> None:
+        for worker in list(self._activeWorkers):
+            if hasattr(worker, "cancel"):
+                worker.cancel()
+        self._analysisPool.clear()
+        self._analysisPool.waitForDone(2000)
+        self._bgSignals.clear()
+        self._activeWorkers.clear()
+
     def getCachedAnalysis(self, file_path: str) -> dict | None:
-        return self._analysisCache.get(str(Path(file_path)))
+        key = str(Path(file_path))
+        if key in self._analysisCache:
+            return self._analysisCache[key]
+        target_norm = os.path.normcase(os.path.abspath(file_path))
+        for k, v in self._analysisCache.items():
+            if os.path.normcase(os.path.abspath(k)) == target_norm:
+                return v
+        return None
 
     def refresh(self, *_args) -> None:
-        for e in self._hist.getHistory(1000):
+        for e in self._hist.getHistory(500):
             if (fp := str(e.get("filePath") or "")) and isinstance(e.get("analysis"), dict) and e["analysis"].get("key"):
                 self._analysisCache.setdefault(fp, e["analysis"])
+        while len(self._analysisCache) > 500:
+            self._analysisCache.pop(next(iter(self._analysisCache)), None)
         entries, stats = self._filtered_entries(), self._hist.getStats()
         visible = entries[:self._limit]
         self._clear_cards()

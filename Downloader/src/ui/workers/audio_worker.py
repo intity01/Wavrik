@@ -34,14 +34,23 @@ class AnalyzeAudioWorker(QRunnable):
         super().__init__()
         self._path = Path(path)
         self._signals = signals
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        self._cancelled = True
 
     def run(self) -> None:
+        if self._cancelled:
+            return
         try:
             result = analyze_audio_file(self._path)
+            if self._cancelled:
+                return
             result["filePath"] = str(self._path)
             self._signals.analyzed.emit(result)
         except Exception as exc:
-            self._signals.error.emit(f"Analysis failed: {exc}")
+            if not self._cancelled:
+                self._signals.error.emit(f"Analysis failed: {exc}")
 
 
 class RenderPitchWorker(QRunnable):
@@ -49,13 +58,22 @@ class RenderPitchWorker(QRunnable):
         super().__init__()
         self._job = job
         self._signals = signals
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        self._cancelled = True
 
     def run(self) -> None:
+        if self._cancelled:
+            return
         try:
             max_dur = 25.0 if self._job.is_preview else 0.0
             start = self._job.start_sec if self._job.is_preview else 0.0
             opts = (self._job.engine, self._job.fmt, self._job.tempo_ratio, max_dur, start)
             out = render_audio_clip(self._job.source, self._job.target, self._job.semitones, opts)
+            if self._cancelled:
+                return
             self._signals.rendered.emit(str(out), self._job.is_preview)
         except Exception as exc:
-            self._signals.error.emit(f"Pitch render failed: {exc}")
+            if not self._cancelled:
+                self._signals.error.emit(f"Pitch render failed: {exc}")

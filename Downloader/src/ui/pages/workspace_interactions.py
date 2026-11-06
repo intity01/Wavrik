@@ -86,3 +86,7 @@ class WorkspaceInteractionMixin:
         workers = [*self._metaWorkers.values(), *self._downloadWorkers.values()]
         for worker in workers:
             worker.cancel()
+        self._metaPool.clear()
+        self._downloadPool.clear()
+        self._metaPool.waitForDone(2000)
+        self._downloadPool.waitForDone(2000)

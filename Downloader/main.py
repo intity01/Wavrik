@@ -9,6 +9,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication
 
 from src.core.config import Config
+from src.core.crash_handler import install_crash_handler
 from src.core.logger import Logger
 from src.core.runtime import application_root, find_deno, find_ffmpeg, resource_root
 from src.core.tray import TrayIcon
@@ -94,6 +95,7 @@ def main(argv: list[str] | None = None) -> int:
     app = _create_app()
     config = Config()
     logger = Logger(logDir=config.appDataDir / "logs")
+    install_crash_handler(logger)
     tray = TrayIcon()
     tray.start()
     deps = WindowDependencies(
@@ -104,15 +106,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     window = MediaDownloaderUI(deps)
     tray.setCallbacks(window.show, app.quit)
-    if sys.platform == "darwin":
-        app.aboutToQuit.connect(lambda: _cleanup_before_quit(window, tray))
+    app.aboutToQuit.connect(lambda: _cleanup_before_quit(window, tray))
     window.show()
     return app.exec()
 
 
 def _cleanup_before_quit(window, tray) -> None:
-    """Perform cleanup before application quits (macOS)."""
-    window.pageWorkspace._cleanup()
+    """Perform unified cleanup before application quits."""
+    if hasattr(window, "cleanup"):
+        window.cleanup()
+    elif hasattr(window, "pageWorkspace") and hasattr(window.pageWorkspace, "_cleanup"):
+        window.pageWorkspace._cleanup()
     tray.stop()
 
 

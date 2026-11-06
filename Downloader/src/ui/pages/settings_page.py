@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSpinBox, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
-from src.ui.components.controls import ComboBox, SmoothScrollArea, ToggleButton
+from src.services.platform_actions import open_path
+from src.ui.components.controls import SmoothScrollArea
 from src.ui.components.update_card import UpdateCard
 from src.ui.i18n import tr
+
+from .settings_view import build_appearance_card, build_behavior_card, build_queue_card
 
 
 class SettingsInterface(QWidget):
@@ -35,9 +38,9 @@ class SettingsInterface(QWidget):
         self.subtitleLabel = QLabel(tr("set.subtitle", "en"), objectName="PageSubtitle")
         layout.addWidget(self.titleLabel)
         layout.addWidget(self.subtitleLabel)
-        layout.addWidget(self._appearance_card())
-        layout.addWidget(self._queue_card())
-        layout.addWidget(self._behavior_card())
+        layout.addWidget(build_appearance_card(self))
+        layout.addWidget(build_queue_card(self))
+        layout.addWidget(build_behavior_card(self))
         self.updateCard = UpdateCard(self._updater, self._cfg)
         self.updateCard.updateAvailable.connect(self.updateAvailable.emit)
         layout.addWidget(self.updateCard)
@@ -45,55 +48,10 @@ class SettingsInterface(QWidget):
         scroll.setWidget(content)
         root.addWidget(scroll)
 
-    def _appearance_card(self) -> QFrame:
-        card, layout, self.appHeading = _settings_card("Language & Appearance")
-        self.languageCombo = ComboBox()
-        self.languageCombo.setMaximumWidth(240)
-        self.languageCombo.addItem("ไทย (Thai)", "th")
-        self.languageCombo.addItem("English", "en")
-        current = self._cfg.get("language", "th")
-        index = next((i for i in range(self.languageCombo.count()) if self.languageCombo.itemData(i) == current), 0)
-        self.languageCombo.setCurrentIndex(index)
-        self.languageCombo.currentIndexChanged.connect(self._save_language)
-        self.themeCombo = ComboBox()
-        self.themeCombo.setMaximumWidth(240)
-        for data in ("light", "dark"):
-            self.themeCombo.addItem(tr(f"set.theme_{data}", current), data)
-        self.themeCombo.setCurrentIndex(max(0, self.themeCombo.findData(self._cfg.get("theme", "light"))))
-        self.themeCombo.currentIndexChanged.connect(self._save_theme)
-        row_lang, self.lblLang = _row("Interface language", self.languageCombo)
-        row_theme, self.lblTheme = _row("Theme", self.themeCombo)
-        layout.addLayout(row_lang)
-        layout.addLayout(row_theme)
-        return card
-
-    def _queue_card(self) -> QFrame:
-        card, layout, self.queueHeading = _settings_card("Queue Concurrency")
-        self.queueHint = QLabel(tr("set.queue_hint", "en"), objectName="MutedText")
-        self.queueHint.setWordWrap(True)
-        self.concurrentSpin = QSpinBox()
-        self.concurrentSpin.setRange(1, 5)
-        self.concurrentSpin.setMaximumWidth(120)
-        self.concurrentSpin.setValue(self._cfg.get("maxConcurrentDownloads", 2))
-        self.concurrentSpin.valueChanged.connect(self._save_concurrency)
-        layout.addWidget(self.queueHint)
-        row_conc, self.lblConcurrent = _row("Simultaneous downloads", self.concurrentSpin)
-        layout.addLayout(row_conc)
-        return card
-
-    def _behavior_card(self) -> QFrame:
-        card, layout, self.behHeading = _settings_card("System Behavior")
-        self.clipboardCheck = ToggleButton("Clipboard link suggestions")
-        self.clipboardCheck.setChecked(self._cfg.get("clipboardMonitoring", True))
-        self.clipboardCheck.toggled.connect(lambda value: self._save("clipboardMonitoring", value))
-        self.trayCheck = ToggleButton("Continue in system tray")
-        self.trayCheck.setChecked(self._cfg.get("minimizeToTray", False))
-        self.trayCheck.toggled.connect(lambda value: self._save("minimizeToTray", value))
-        row_clip, self.lblClipboard = _row("Clipboard link suggestions", self.clipboardCheck)
-        row_tray, self.lblTray = _row("Continue in system tray", self.trayCheck)
-        layout.addLayout(row_clip)
-        layout.addLayout(row_tray)
-        return card
+    def _open_logs(self) -> None:
+        log_dir = self._cfg.appDataDir / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        open_path(log_dir)
 
     def setLanguage(self, lang: str) -> None:
         self.titleLabel.setText(tr("set.title", lang))
@@ -109,6 +67,8 @@ class SettingsInterface(QWidget):
         self.behHeading.setText(tr("set.behavior", lang))
         self.lblClipboard.setText(tr("set.clipboard_label", lang))
         self.lblTray.setText(tr("set.tray_label", lang))
+        self.lblLogs.setText(tr("set.logs_label", lang))
+        self.openLogsBtn.setText(tr("set.open_logs", lang))
 
     def _save_language(self) -> None:
         lang = str(self.languageCombo.currentData() or "th")
@@ -126,24 +86,3 @@ class SettingsInterface(QWidget):
     def _save(self, key: str, value) -> None:
         self._cfg.set(key, value)
         self._cfg.saveSettings()
-
-
-def _settings_card(title: str) -> tuple[QFrame, QVBoxLayout, QLabel]:
-    card = QFrame()
-    card.setObjectName("SettingsCard")
-    layout = QVBoxLayout(card)
-    layout.setContentsMargins(14, 12, 14, 12)
-    layout.setSpacing(8)
-    heading = QLabel(title)
-    heading.setObjectName("SectionTitle")
-    layout.addWidget(heading)
-    return card, layout, heading
-
-
-def _row(label: str, control: QWidget) -> tuple[QHBoxLayout, QLabel]:
-    row = QHBoxLayout()
-    text = QLabel(label)
-    text.setMinimumWidth(190)
-    row.addWidget(text)
-    row.addWidget(control, 1)
-    return row, text
