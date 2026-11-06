@@ -7,6 +7,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel
 
 from src.services.audio_analysis import camelot_code, enharmonic_key, mirex_key_score, transpose_key
+from src.services.audio_camelot import get_harmonic_neighbors
 from src.services.audio_stems import STEM_MODES
 from src.ui.components.controls import ComboBox, PushButton, ToolButton
 from src.ui.theme.key_colors import apply_key_property
@@ -65,6 +66,24 @@ def populate_harmonic_buttons(buttons: list, neighbors: list[dict]) -> None:
 def format_analysis_status(key: str, bpm: float, result: dict) -> str:
     enh, conf = enharmonic_key(key), result.get("confidence", "")
     return f"Estimated {f'{key} / {enh}' if enh != key else key} ({camelot_code(key)}){f' [{conf}%]' if conf else ''} · {bpm:.1f} BPM"
+
+
+def apply_analysis_result(page, result: dict) -> None:
+    key, bpm = str(result.get("key") or "C major"), float(result.get("bpm") or 120.0)
+    page._candidates = list(result.get("key_candidates") or [])
+    page._harmonic_cands = get_harmonic_neighbors(key)
+    page.detectedKeyCombo.setCurrentText(key)
+    page.bpmSpin.blockSignals(True)
+    page.bpmSpin.setValue(bpm)
+    page.bpmSpin.blockSignals(False)
+    page.targetBpmSpin.setValue(bpm)
+    page.badgeLabel.setText(str(result.get("badge") or "Experimental / Estimate"))
+    page.sectionKeyLabel.setText(f"Section Key: {result.get('section_summary', '--')}")
+    page.waveformWidget.setPeaks(result.get("peaks", []), result.get("duration_sec", 0.0), result.get("section_summary", ""))
+    populate_candidate_buttons(page.candButtons, page._candidates, key)
+    populate_harmonic_buttons(page.camelotButtons, page._harmonic_cands)
+    update_preview_labels(page)
+    page.statusLabel.setText(format_analysis_status(key, bpm, result))
 
 
 def start_stem_separation(page) -> None:

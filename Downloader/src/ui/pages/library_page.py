@@ -59,17 +59,29 @@ class LibraryInterface(QWidget):
         p, key = Path(file_path), str(Path(file_path))
         if p.is_file() and p.suffix.lower() in AUDIO_EXTS and p.stat().st_size >= 100 and key not in self._analysisCache:
             signals = AudioToolSignals()
-            signals.analyzed.connect(self.storeAnalysisResult)
+            signals.analyzed.connect(lambda res, s=signals: (self._cleanup_bg_signal(s), self.storeAnalysisResult(res)))
+            signals.error.connect(lambda _err, s=signals: self._cleanup_bg_signal(s))
             self._bgSignals.append(signals)
             self._analysisPool.start(AnalyzeAudioWorker(p, signals))
 
+    def _cleanup_bg_signal(self, sig: AudioToolSignals) -> None:
+        if sig in self._bgSignals:
+            self._bgSignals.remove(sig)
+
     def storeAnalysisResult(self, result: dict) -> None:
         if (fp := str(result.get("filePath") or "")):
+            if len(self._analysisCache) > 500:
+                self._analysisCache.pop(next(iter(self._analysisCache)), None)
             self._analysisCache[fp] = result
             if hasattr(self._hist, "updateAnalysis"):
                 self._hist.updateAnalysis(fp, result)
             if fp in self._cardsByPath:
                 self._cardsByPath[fp].setAnalysisResult(result)
+
+    def cleanup(self) -> None:
+        self._analysisPool.clear()
+        self._analysisPool.waitForDone(2000)
+        self._bgSignals.clear()
 
     def getCachedAnalysis(self, file_path: str) -> dict | None:
         return self._analysisCache.get(str(Path(file_path)))

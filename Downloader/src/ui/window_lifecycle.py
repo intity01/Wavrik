@@ -6,6 +6,19 @@ import sys
 
 
 class WindowLifecycleMixin:
+    def cleanup(self) -> None:
+        if getattr(self, "_cleaned_up", False):
+            return
+        self._cleaned_up = True
+        if hasattr(self, "pageWorkspace") and hasattr(self.pageWorkspace, "_cleanup"):
+            self.pageWorkspace._cleanup()
+        if hasattr(self, "pageLibrary") and hasattr(self.pageLibrary, "cleanup"):
+            self.pageLibrary.cleanup()
+        if hasattr(self, "pageAudioTools") and hasattr(self.pageAudioTools, "cleanup"):
+            self.pageAudioTools.cleanup()
+        if hasattr(self, "_tray"):
+            self._tray.stop()
+
     def closeEvent(self, event) -> None:
         if sys.platform == "darwin":
             event.ignore()
@@ -18,8 +31,7 @@ class WindowLifecycleMixin:
             self.hide()
             self._tray.notify("Still running", "Downloads continue in the system tray.")
             return
-        self.pageWorkspace._cleanup()
-        self._tray.stop()
+        self.cleanup()
         event.accept()
 
     def changeEvent(self, event) -> None:

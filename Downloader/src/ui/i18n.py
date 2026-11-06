@@ -45,6 +45,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "set.behavior": "System Behavior",
         "set.clipboard_label": "Clipboard link suggestions",
         "set.tray_label": "Continue in system tray",
+        "set.logs_label": "Log files",
+        "set.open_logs": "Open Log Folder",
     },
     "th": {
         "nav.sec_media": "สื่อและคลังไฟล์",
@@ -88,6 +90,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "set.behavior": "การทำงานเบื้องหลัง",
         "set.clipboard_label": "ตรวจจับลิงก์จากคลิปบอร์ดอัตโนมัติ",
         "set.tray_label": "ทำงานต่อในถาดระบบเมื่อปิดหน้าต่าง",
+        "set.logs_label": "ไฟล์บันทึกการทำงาน",
+        "set.open_logs": "เปิดโฟลเดอร์บันทึก (Logs)",
     },
 }
 

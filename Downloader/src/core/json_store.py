@@ -1,4 +1,4 @@
-"""Thread-safe atomic JSON persistence."""
+"""Thread-safe atomic JSON persistence with lock retry and corruption backup."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import json
 import os
 import threading
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -35,13 +36,27 @@ class JsonStore:
 
     def write(self, payload: Any) -> None:
         encoded = json.dumps(payload, indent=2, ensure_ascii=False)
-        temp_path = self.path.with_suffix(self.path.suffix + ".tmp")
+        temp_path = self.path.with_name(f"{self.path.name}.{uuid.uuid4().hex}.tmp")
         with self._lock:
-            with temp_path.open("w", encoding="utf-8") as handle:
-                handle.write(encoded)
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temp_path, self.path)
+            try:
+                with temp_path.open("w", encoding="utf-8") as handle:
+                    handle.write(encoded)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                for attempt in range(5):
+                    try:
+                        os.replace(temp_path, self.path)
+                        return
+                    except PermissionError:
+                        if attempt == 4:
+                            raise
+                        time.sleep(0.05 * (attempt + 1))
+            finally:
+                if temp_path.exists():
+                    try:
+                        temp_path.unlink(missing_ok=True)
+                    except OSError:
+                        pass
 
     def backup(self) -> None:
         """Quarantine the current file when its structure is unusable."""
@@ -51,6 +66,12 @@ class JsonStore:
     def _backup_corrupt_file(self) -> None:
         try:
             backup = self.path.with_suffix(self.path.suffix + ".corrupt")
+            if backup.exists():
+                try:
+                    ts = int(time.time())
+                    os.replace(backup, self.path.with_name(f"{self.path.name}.{ts}.corrupt"))
+                except OSError:
+                    pass
             os.replace(self.path, backup)
         except OSError:
             pass

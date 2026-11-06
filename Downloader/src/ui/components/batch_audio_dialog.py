@@ -5,11 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from PyQt6.QtCore import QThreadPool
-from PyQt6.QtWidgets import QDialog, QDoubleSpinBox, QFileDialog, QHBoxLayout, QLabel, QProgressBar, QSpinBox, QVBoxLayout
+from PyQt6.QtWidgets import QDialog, QFileDialog
 
 from src.services.audio_batch import BatchJobConfig
-from src.ui.components.controls import ComboBox, LineEdit, PrimaryPushButton, PushButton, ToolButton
 from src.ui.workers.batch_worker import BatchAudioSignals, BatchAudioWorker
+
+from .batch_audio_view import build_batch_ui
 
 
 class BatchAudioDialog(QDialog):
@@ -18,77 +19,11 @@ class BatchAudioDialog(QDialog):
         self._sources, self._cfg = [Path(p) for p in sources if Path(p).is_file()], config
         self._cached_keys = cached_keys or {}
         self._pool = QThreadPool(self)
+        self._worker: BatchAudioWorker | None = None
+        self._signals: BatchAudioSignals | None = None
         self.setWindowTitle("Batch Audio Processing")
         self.setMinimumWidth(520)
-        self._build_ui()
-
-    def _build_ui(self) -> None:
-        root = QVBoxLayout(self)
-        root.setContentsMargins(20, 18, 20, 18)
-        root.setSpacing(10)
-        root.addWidget(QLabel("Batch Audio Processing (Pitch & Tempo)", objectName="SectionTitle"))
-        count_txt = f"Selected: {len(self._sources)} audio tracks"
-        root.addWidget(QLabel(count_txt, objectName="MutedText"))
-        self._add_controls(root)
-        self._add_destination(root)
-        self._add_progress(root)
-
-    def _add_controls(self, root: QVBoxLayout) -> None:
-        p_row = QHBoxLayout()
-        self.semitoneSpin = QSpinBox(minimum=-12, maximum=12, value=0)
-        p_row.addWidget(QLabel("Semitones (-12..+12):"))
-        p_row.addWidget(self.semitoneSpin)
-        for s in (-2, 0, 2):
-            btn = ToolButton(f"{f'+{s}' if s > 0 else s} st")
-            btn.clicked.connect(lambda _c=False, val=s: self.semitoneSpin.setValue(val))
-            p_row.addWidget(btn)
-        p_row.addStretch(1)
-        root.addLayout(p_row)
-        t_row = QHBoxLayout()
-        self.tempoSpin = QDoubleSpinBox(minimum=0.5, maximum=2.0, value=1.0, singleStep=0.05, decimals=2)
-        t_row.addWidget(QLabel("Tempo Stretch (0.5x–2.0x):"))
-        t_row.addWidget(self.tempoSpin)
-        for val in (0.9, 1.0, 1.1):
-            btn = ToolButton(f"{val:.2f}x")
-            btn.clicked.connect(lambda _c=False, v=val: self.tempoSpin.setValue(v))
-            t_row.addWidget(btn)
-        t_row.addStretch(1)
-        root.addLayout(t_row)
-        f_row = QHBoxLayout()
-        self.fmtCombo = ComboBox()
-        for label, k in (("WAV 24-bit", "wav"), ("FLAC Lossless", "flac"), ("MP3 320k", "mp3")):
-            self.fmtCombo.addItem(label, k)
-        f_row.addWidget(QLabel("Format:"))
-        f_row.addWidget(self.fmtCombo, 1)
-        root.addLayout(f_row)
-
-    def _add_destination(self, root: QVBoxLayout) -> None:
-        d_row = QHBoxLayout()
-        default_dir = self._cfg.getDownloadPath("audio")
-        self.destInput = LineEdit(str(default_dir))
-        self.browseBtn = PushButton("Change folder")
-        self.browseBtn.clicked.connect(self._browse)
-        d_row.addWidget(self.destInput, 1)
-        d_row.addWidget(self.browseBtn)
-        root.addWidget(QLabel("Save Location:"))
-        root.addLayout(d_row)
-
-    def _add_progress(self, root: QVBoxLayout) -> None:
-        self.pbar = QProgressBar()
-        self.pbar.setRange(0, max(1, len(self._sources)))
-        self.pbar.setValue(0)
-        self.status = QLabel("Ready to process.", objectName="MutedText")
-        b_row = QHBoxLayout()
-        self.startBtn = PrimaryPushButton("Start Batch Processing")
-        self.startBtn.clicked.connect(self._start_batch)
-        self.closeBtn = PushButton("Close")
-        self.closeBtn.clicked.connect(self.accept)
-        b_row.addStretch(1)
-        b_row.addWidget(self.closeBtn)
-        b_row.addWidget(self.startBtn)
-        for w in (self.pbar, self.status):
-            root.addWidget(w)
-        root.addLayout(b_row)
+        build_batch_ui(self)
 
     def _browse(self) -> None:
         sel = QFileDialog.getExistingDirectory(self, "Choose destination folder", self.destInput.text())
@@ -97,6 +32,7 @@ class BatchAudioDialog(QDialog):
 
     def _start_batch(self) -> None:
         self.startBtn.setEnabled(False)
+        self.closeBtn.setText("Cancel")
         self.pbar.setValue(0)
         self.status.setText(f"Processing 1 of {len(self._sources)}…")
         cfg = BatchJobConfig(
@@ -104,15 +40,43 @@ class BatchAudioDialog(QDialog):
             engine="r3_finer", fmt=str(self.fmtCombo.currentData() or "wav"),
             output_dir=Path(self.destInput.text()),
         )
-        signals = BatchAudioSignals()
-        signals.itemProcessed.connect(self._on_item)
-        signals.finished.connect(self._on_finished)
-        self._pool.start(BatchAudioWorker(self._sources, cfg, signals, self._cached_keys))
+        self._signals = BatchAudioSignals()
+        self._signals.itemProcessed.connect(self._on_item)
+        self._signals.finished.connect(self._on_finished)
+        self._worker = BatchAudioWorker(self._sources, cfg, self._signals, self._cached_keys)
+        self._pool.start(self._worker)
 
     def _on_item(self, cur: int, total: int, name: str) -> None:
         self.pbar.setValue(cur)
         self.status.setText(f"Completed {cur}/{total}: {name}")
 
     def _on_finished(self, succ: int, fail: int) -> None:
+        self._worker = None
         self.startBtn.setEnabled(True)
+        self.closeBtn.setText("Close")
         self.status.setText(f"Batch completed: {succ} succeeded, {fail} failed.")
+
+    def _cancel_and_wait(self) -> None:
+        if self._worker:
+            self._worker.cancel()
+        if self._signals:
+            try:
+                self._signals.itemProcessed.disconnect()
+                self._signals.finished.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+        self._pool.clear()
+        self._pool.waitForDone(2000)
+        self._worker = None
+
+    def _on_close_clicked(self) -> None:
+        self._cancel_and_wait()
+        self.accept()
+
+    def closeEvent(self, event) -> None:
+        self._cancel_and_wait()
+        event.accept()
+
+    def reject(self) -> None:
+        self._cancel_and_wait()
+        super().reject()

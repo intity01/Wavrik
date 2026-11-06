@@ -83,18 +83,24 @@ class NativeDownloader:
             _, stderr = self._process.communicate(timeout=300)
             return self._handle_manifest_result(target, stderr, progress)
         except subprocess.TimeoutExpired:
-            if self._process:
-                self._process.kill()
-                try:
-                    self._process.communicate()
-                except Exception:
-                    pass
-            target.unlink(missing_ok=True)
-            return DownloadResult(False, JobState.FAILED, error="FFmpeg timed out after 300 seconds.", engine="native")
+            return self._handle_timeout(target)
         except OSError:
             return DownloadResult(False, JobState.FAILED, error="Could not start FFmpeg. Check that ffmpeg.exe is available.", engine="native")
         finally:
             self._process = None
+
+    def _handle_timeout(self, target: Path) -> DownloadResult:
+        if self._logger:
+            self._logger.warning("FFmpeg process timed out after 300 seconds.")
+        if self._process:
+            self._process.kill()
+            try:
+                self._process.communicate()
+            except Exception as exc:
+                if self._logger:
+                    self._logger.warning(f"FFmpeg cleanup error: {exc}")
+        target.unlink(missing_ok=True)
+        return DownloadResult(False, JobState.FAILED, error="FFmpeg timed out after 300 seconds.", engine="native")
 
     def _handle_manifest_result(self, target: Path, stderr: str | None, progress) -> DownloadResult:
         if self._cancel.is_set():

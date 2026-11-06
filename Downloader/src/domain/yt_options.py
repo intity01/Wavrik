@@ -91,7 +91,7 @@ def _base_options(
         "fragment_retries": settings.retry_count, "extractor_retries": settings.retry_count,
         "file_access_retries": 3,
         "retry_sleep_functions": retry_delays(settings.sleep_interval, settings.max_sleep_interval),
-        "skip_unavailable_fragments": False, "ignoreerrors": True,
+        "skip_unavailable_fragments": False, "ignoreerrors": False,
         "nooverwrites": preset.container != "all",
     }
     if postprocessor_hook:

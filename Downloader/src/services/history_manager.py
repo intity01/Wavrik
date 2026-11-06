@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import threading
 from datetime import UTC, datetime
 from typing import Any
@@ -72,8 +73,14 @@ class HistoryManager:
         if not file_path or not isinstance(analysis, dict):
             return
         compact = {k: analysis[k] for k in _ANALYSIS_KEYS if k in analysis}
+        target_norm = os.path.normcase(os.path.abspath(file_path))
         with self._lock:
-            changed = any(e.get("filePath") == file_path and not e.update(analysis=compact) for e in self.history)
+            changed = False
+            for e in self.history:
+                raw_path = e.get("filePath")
+                if raw_path and os.path.normcase(os.path.abspath(raw_path)) == target_norm:
+                    e["analysis"] = compact
+                    changed = True
             if changed:
                 self._save()
 
