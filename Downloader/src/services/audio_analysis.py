@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from array import array
 from pathlib import Path
 import subprocess
 import sys
 import wave
+
+import numpy as np
 
 from src.core.runtime import find_ffmpeg
 from src.services.audio_dsp import downsample_peaks as _downsample_peaks, estimate_bpm as _estimate_bpm
@@ -87,7 +88,7 @@ def mirex_bpm_score(predicted: float, reference: float) -> tuple[float, str]:
 
 def analyze_audio_file(path: str | Path, max_seconds: int = 180) -> dict:
     samples, sr = _decode_mono_samples(Path(path), max_seconds)
-    if len(samples) < sr // 2 or max((abs(x) for x in samples), default=0.0) < 1e-5:
+    if len(samples) < sr // 2 or (float(np.max(np.abs(samples))) if len(samples) else 0.0) < 1e-5:
         return {"key": "C major", "camelot": "8B", "bpm": 120.0, "confidence": 0, "status": "unavailable", "key_candidates": []}
     bpm_slice = samples[10 * sr : 70 * sr] if len(samples) > 40 * sr else samples
     candidates, k1, k2 = _extract_key_and_sections(samples, sr)
@@ -117,7 +118,7 @@ def analyze_audio_file(path: str | Path, max_seconds: int = 180) -> dict:
     }
 
 
-def _decode_mono_samples(path: Path, max_seconds: int) -> tuple[list[float], int]:
+def _decode_mono_samples(path: Path, max_seconds: int) -> tuple[np.ndarray, int]:
     if not path.is_file():
         raise FileNotFoundError(path)
     ffmpeg_dir = find_ffmpeg()
@@ -127,18 +128,19 @@ def _decode_mono_samples(path: Path, max_seconds: int) -> tuple[list[float], int
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
         proc = subprocess.run(cmd, capture_output=True, timeout=45, check=False, creationflags=flags)
         if proc.returncode == 0 and proc.stdout:
-            pcm = array("h")
-            pcm.frombytes(proc.stdout[: (len(proc.stdout) // 2) * 2])
-            return [s / 32768.0 for s in pcm], 16000
+            raw = proc.stdout[: (len(proc.stdout) // 2) * 2]
+            pcm = np.frombuffer(raw, dtype=np.int16)
+            return pcm.astype(np.float32) * (1.0 / 32768.0), 16000
     return _read_wav_fallback(path, max_seconds)
 
 
-def _read_wav_fallback(path: Path, max_seconds: int) -> tuple[list[float], int]:
+def _read_wav_fallback(path: Path, max_seconds: int) -> tuple[np.ndarray, int]:
     with wave.open(str(path), "rb") as wf:
         sr, ch, width = wf.getframerate(), wf.getnchannels(), wf.getsampwidth()
         raw = wf.readframes(min(wf.getnframes(), sr * max_seconds))
     if width != 2 or not raw:
-        return [], 16000
-    pcm = array("h")
-    pcm.frombytes(raw[: (len(raw) // 2) * 2])
-    return [pcm[i] / 32768.0 for i in range(0, len(pcm), max(1, ch))], sr
+        return np.array([], dtype=np.float32), 16000
+    pcm = np.frombuffer(raw[: (len(raw) // 2) * 2], dtype=np.int16)
+    if ch > 1:
+        pcm = pcm[::ch]
+    return pcm.astype(np.float32) * (1.0 / 32768.0), sr

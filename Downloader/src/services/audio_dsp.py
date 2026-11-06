@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import math
+from typing import Sequence
+
+import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
 
 _FLUX_FREQS = (75.0, 130.0, 220.0, 380.0, 660.0, 1150.0, 2000.0, 3400.0)
 
 
-def estimate_bpm(samples: list[float], sr: int) -> float:
+def estimate_bpm(samples: Sequence[float] | np.ndarray, sr: int) -> float:
     win, hop = 256, 128
     fps = sr / float(hop)
     onset = _spectral_flux_onset(samples, sr, win, hop)
@@ -22,6 +26,8 @@ def estimate_bpm(samples: list[float], sr: int) -> float:
         _accumulate_window_bpm(w, fps, scores)
     ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
     best_bpm, top_sc = ranked[0]
+    if top_sc <= 1e-6:
+        return 120.0
     half_b = int(round(best_bpm / 2.0))
     if 72 <= half_b <= 95 and scores.get(half_b, 0.0) >= top_sc * 0.88:
         return float(half_b)
@@ -40,83 +46,84 @@ def _parabolic_bpm_refine(bpm: int, scores: dict[int, float]) -> float:
     return round(float(bpm) + delta, 1)
 
 
-def _spectral_flux_onset(samples: list[float], sr: int, win: int, hop: int) -> list[float]:
-    n_frames = (len(samples) - win) // hop
+def _spectral_flux_onset(samples: Sequence[float] | np.ndarray, sr: int, win: int, hop: int) -> np.ndarray:
+    arr = np.asarray(samples, dtype=np.float32)
+    n_frames = (len(arr) - win) // hop
     if n_frames <= 0:
-        return []
-    coeffs = [2.0 * math.cos(2.0 * math.pi * f / sr) for f in _FLUX_FREQS]
-    prev_lp = [0.0] * len(coeffs)
-    flux = [0.0] * n_frames
-    for f_idx in range(n_frames):
-        frame = samples[f_idx * hop : f_idx * hop + win]
-        total = 0.0
-        for b_idx, c in enumerate(coeffs):
-            s1, s2 = 0.0, 0.0
-            for x in frame:
-                s0 = x + c * s1 - s2
-                s2, s1 = s1, s0
-            lp = math.log1p(100.0 * math.sqrt(max(0.0, s1 * s1 + s2 * s2 - c * s1 * s2) / win))
-            if lp > prev_lp[b_idx]:
-                total += lp - prev_lp[b_idx]
-            prev_lp[b_idx] = lp
-        flux[f_idx] = total
+        return np.array([], dtype=np.float32)
+    frames = sliding_window_view(arr, window_shape=win)[::hop][:n_frames]
+    omegas = 2.0 * np.pi * np.array(_FLUX_FREQS, dtype=np.float32) / sr
+    n = np.arange(win, dtype=np.float32)
+    basis = np.exp(-1j * (n[:, None] * omegas[None, :])).astype(np.complex64)
+    x_spec = frames @ basis
+    mag = np.abs(x_spec) * (1.0 / math.sqrt(win))
+    lp = np.log1p(100.0 * mag)
+    diff = np.diff(lp, axis=0, prepend=0.0)
+    flux = np.sum(np.maximum(0.0, diff), axis=1)
     return _sharpen_onset(flux, max(3, int(round(0.15 * sr / hop))))
 
 
-def _sharpen_onset(flux: list[float], hw: int) -> list[float]:
+def _sharpen_onset(flux: np.ndarray, hw: int) -> np.ndarray:
     n = len(flux)
-    ps = [0.0] * (n + 1)
-    for i in range(n):
-        ps[i + 1] = ps[i] + flux[i]
-    return [
-        max(0.0, flux[i] - (ps[min(n, i + hw + 1)] - ps[max(0, i - hw)]) / max(1, min(n, i + hw + 1) - max(0, i - hw)))
-        for i in range(n)
-    ]
+    if n == 0:
+        return np.array([], dtype=np.float32)
+    ps = np.pad(np.cumsum(flux, dtype=np.float64), (1, 0))
+    idx = np.arange(n)
+    hi = np.minimum(n, idx + hw + 1)
+    lo = np.maximum(0, idx - hw)
+    avg = (ps[hi] - ps[lo]) / np.maximum(1, hi - lo)
+    return np.maximum(0.0, flux - avg).astype(np.float32)
 
 
-def _accumulate_window_bpm(w: list[float], fps: float, scores: dict[int, float]) -> None:
-    wn = len(w)
-    norm = math.sqrt(sum(x * x for x in w) / max(1, wn))
+def _accumulate_window_bpm(w: Sequence[float] | np.ndarray, fps: float, scores: dict[int, float]) -> None:
+    arr = np.asarray(w, dtype=np.float64)
+    wn = len(arr)
+    norm = math.sqrt(float(np.sum(arr * arr)) / max(1, wn))
     if norm < 1e-4:
         return
-    wnorm = [x / norm for x in w]
+    wnorm = arr / norm
     max_lag = min(wn - 2, int(fps * 60.0 * 4.0 / 65.0) + 4)
-    needed: set[int] = set()
-    for bpm in range(66, 180):
-        base = fps * 60.0 / bpm
-        for mult in (1.0, 2.0, 3.0, 4.0):
-            idx = int(base * mult)
-            if 15 <= idx < max_lag:
-                needed.add(idx)
-                needed.add(idx + 1)
-    acf = [0.0] * (max_lag + 1)
-    for lag in needed:
-        acf[lag] = sum(wnorm[i] * wnorm[i - lag] for i in range(lag, wn)) / (wn - lag)
-    for bpm in range(66, 180):
-        lag = fps * 60.0 / bpm
-        sc = (
-            1.0 * _interp(acf, lag, max_lag)
-            + 0.55 * _interp(acf, lag * 2.0, max_lag)
-            + 0.35 * _interp(acf, lag * 4.0, max_lag)
-            + 0.20 * _interp(acf, lag * 3.0, max_lag)
-        )
-        prior = math.exp(-0.5 * ((math.log2(bpm / 102.0)) / 0.50) ** 2)
-        scores[bpm] += sc * (0.80 + 0.20 * prior)
+    corr = np.correlate(wnorm, wnorm, mode="full")[wn - 1 : wn + max_lag]
+    lags = np.arange(max_lag + 1)
+    acf = corr / (wn - lags)
+    bpms = np.arange(66, 180, dtype=np.float64)
+    base_lags = fps * 60.0 / bpms
+    sc = (
+        1.0 * _vec_interp(acf, base_lags, max_lag)
+        + 0.55 * _vec_interp(acf, base_lags * 2.0, max_lag)
+        + 0.35 * _vec_interp(acf, base_lags * 4.0, max_lag)
+        + 0.20 * _vec_interp(acf, base_lags * 3.0, max_lag)
+    )
+    priors = np.exp(-0.5 * ((np.log2(bpms / 102.0)) / 0.50) ** 2)
+    weighted = sc * (0.80 + 0.20 * priors)
+    for idx_b, bpm in enumerate(range(66, 180)):
+        scores[bpm] += float(weighted[idx_b])
 
 
-def _interp(acf: list[float], lag_f: float, max_lag: int) -> float:
+def _vec_interp(acf: np.ndarray, lags: np.ndarray, max_lag: int) -> np.ndarray:
+    idx = lags.astype(np.int32)
+    valid = (idx >= 15) & (idx < max_lag)
+    idx_c = np.clip(idx, 0, max_lag - 1)
+    frac = lags - idx
+    val = acf[idx_c] * (1.0 - frac) + acf[idx_c + 1] * frac
+    return np.where(valid, val, 0.0)
+
+
+def _interp(acf: list[float] | np.ndarray, lag_f: float, max_lag: int) -> float:
     idx = int(lag_f)
     if idx < 15 or idx >= max_lag:
         return 0.0
     frac = lag_f - idx
-    return acf[idx] * (1.0 - frac) + acf[idx + 1] * frac
+    return float(acf[idx] * (1.0 - frac) + acf[idx + 1] * frac)
 
 
-def downsample_peaks(samples: list[float], count: int = 80) -> list[float]:
-    if not samples:
+def downsample_peaks(samples: Sequence[float] | np.ndarray, count: int = 80) -> list[float]:
+    arr = np.abs(np.asarray(samples, dtype=np.float32))
+    n = len(arr)
+    if n == 0:
         return []
-    step = max(1, len(samples) // count)
-    raw = [max((abs(s) for s in samples[i : i + step]), default=0.0) for i in range(0, len(samples), step)][:count]
+    step = max(1, n // count)
+    raw = [float(np.max(arr[i : i + step])) for i in range(0, min(n, count * step), step)]
     top = max(raw, default=0.0)
     if top <= 1e-6:
         return [0.05] * len(raw)

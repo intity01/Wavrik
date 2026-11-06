@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from array import array
 from dataclasses import dataclass
-import os
+import os, shutil, sys, tempfile, wave  # noqa: E401
 from pathlib import Path
-import shutil, sys, tempfile, wave  # noqa: E401
 from typing import Any
+
+import numpy as np
 
 from src.core.process import is_cancellation_requested, run_cancellable_process
 from src.core.runtime import find_ffmpeg
@@ -44,33 +44,34 @@ def separate_stems(
         phase_lock_stems(master_wav, raw_inst, tmp_v, tmp_i, cancel_check)
         if is_cancellation_requested(cancel_check):
             raise RuntimeError("Stem separation cancelled.")
-        os.replace(tmp_v, voc_dst)
-        os.replace(tmp_i, inst_dst)
+        for s_tmp, s_dst in ((tmp_v, voc_dst), (tmp_i, inst_dst)):
+            os.replace(s_tmp, s_dst)
     return StemResult(vocals_path=voc_dst, instrumental_path=inst_dst, mode_used=actual_mode)
 
 
-def phase_lock_stems(master_wav: Path, inst_est_wav: Path, voc_dst: Path, inst_dst: Path, cancel_check: Any = None) -> None:
+def phase_lock_stems(
+    master_wav: Path, inst_est_wav: Path, voc_dst: Path, inst_dst: Path, cancel_check: Any = None,
+) -> None:
     if is_cancellation_requested(cancel_check):
         raise RuntimeError("Stem separation cancelled.")
     m_pcm, sr, ch = _read_pcm16(master_wav)
     i_pcm, _, _ = _read_pcm16(inst_est_wav)
-    total, n_inst = len(m_pcm), len(i_pcm)
-    v_pcm, i_locked = array("h", [0] * total), array("h", [0] * total)
-    for idx, m in enumerate(m_pcm):
-        v = max(-32768, min(32767, m - (i_pcm[idx] if idx < n_inst else 0)))
-        i = max(-32768, min(32767, m - v))
-        v_pcm[idx], i_locked[idx] = m - i, i
+    m_32, i_32 = m_pcm.astype(np.int32), np.zeros(len(m_pcm), dtype=np.int32)
+    n_inst = min(len(m_pcm), len(i_pcm))
+    i_32[:n_inst] = i_pcm[:n_inst]
+    v = np.clip(m_32 - i_32, -32768, 32767)
+    i_locked = np.clip(m_32 - v, -32768, 32767)
     if is_cancellation_requested(cancel_check):
         raise RuntimeError("Stem separation cancelled.")
-    _write_pcm16(voc_dst, v_pcm, sr, ch)
-    _write_pcm16(inst_dst, i_locked, sr, ch)
+    _write_pcm16(voc_dst, (m_32 - i_locked).astype(np.int16), sr, ch)
+    _write_pcm16(inst_dst, i_locked.astype(np.int16), sr, ch)
 
 
 def fuse_min_magnitude(inst_a: Path, inst_b: Path, out_wav: Path) -> Path:
     pcm_a, sr, ch = _read_pcm16(inst_a)
     pcm_b, _, _ = _read_pcm16(inst_b)
-    fused = array("h", [pcm_a[i] if abs(pcm_a[i]) <= abs(pcm_b[i]) else pcm_b[i] for i in range(min(len(pcm_a), len(pcm_b)))])
-    _write_pcm16(out_wav, fused, sr, ch)
+    n = min(len(pcm_a), len(pcm_b))
+    _write_pcm16(out_wav, np.where(np.abs(pcm_a[:n]) <= np.abs(pcm_b[:n]), pcm_a[:n], pcm_b[:n]), sr, ch)
     return out_wav
 
 
@@ -90,22 +91,22 @@ def _try_roformer_cli(sep_bin: str, master_wav: Path, stage: Path, mode: str, sr
 
 def _run_sep_model(sep_bin: str, master_wav: Path, out_dir: Path, model: str, sr_ch: tuple[int, int], cancel_check: Any = None) -> Path | None:
     out_dir.mkdir(parents=True, exist_ok=True)
-    (model_dir := Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "MediaDownloaderPRO" / "models").mkdir(parents=True, exist_ok=True)
-    cmd = [sep_bin, str(master_wav), "-m", model, "--model_file_dir", str(model_dir), "--output_dir", str(out_dir), "--single_stem", "Instrumental", "--use_autocast"]
+    m_dir = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "MediaDownloaderPRO" / "models"
+    m_dir.mkdir(parents=True, exist_ok=True)
+    cmd = [sep_bin, str(master_wav), "-m", model, "--model_file_dir", str(m_dir), "--output_dir", str(out_dir), "--single_stem", "Instrumental", "--use_autocast"]
     proc = run_cancellable_process(cmd, timeout=900, cancel_check=cancel_check)
     cands = sorted(out_dir.glob("*Instrumental*.wav"))
     return _normalize_wav_spec(cands[0], out_dir / "norm.wav", sr_ch, cancel_check) if (proc.returncode == 0 and cands) else None
 
 
 def _extract_inst_dsp(master_wav: Path, out_wav: Path, sr_ch: tuple[int, int], cancel_check: Any = None) -> Path:
-    sr, ch = sr_ch
     if (ffmpeg := _ffmpeg_exe()):
-        af = "pan=stereo|c0=c0-0.85*c1|c1=c1-0.85*c0,highpass=f=35" if ch >= 2 else "bandreject=f=1100:width_type=h:w=1600"
-        cmd = [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(master_wav), "-af", af, "-ar", str(sr), "-ac", str(ch), "-c:a", "pcm_s16le", str(out_wav)]
+        af = "pan=stereo|c0=c0-0.85*c1|c1=c1-0.85*c0,highpass=f=35" if sr_ch[1] >= 2 else "bandreject=f=1100:width_type=h:w=1600"
+        cmd = [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(master_wav), "-af", af, "-ar", str(sr_ch[0]), "-ac", str(sr_ch[1]), "-c:a", "pcm_s16le", str(out_wav)]
         if run_cancellable_process(cmd, timeout=180, cancel_check=cancel_check).returncode == 0 and out_wav.is_file():
             return out_wav
     pcm, sr, ch = _read_pcm16(master_wav)
-    _write_pcm16(out_wav, array("h", [int(s * 0.45) for s in pcm]), sr, ch)
+    _write_pcm16(out_wav, (pcm.astype(np.float32) * 0.45).astype(np.int16), sr, ch)
     return out_wav
 
 
@@ -120,29 +121,27 @@ def _prepare_master_wav(src: Path, dst: Path, cancel_check: Any = None) -> tuple
 def _normalize_wav_spec(src: Path, dst: Path, sr_ch: tuple[int, int], cancel_check: Any = None) -> Path:
     if not (ffmpeg := _ffmpeg_exe()):
         raise RuntimeError("FFmpeg is required to decode audio for stem separation.")
-    sr, ch = sr_ch
-    cmd = [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(src), "-vn", "-ar", str(sr), "-ac", str(ch), "-c:a", "pcm_s16le", str(dst)]
+    cmd = [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(src), "-vn", "-ar", str(sr_ch[0]), "-ac", str(sr_ch[1]), "-c:a", "pcm_s16le", str(dst)]
     if run_cancellable_process(cmd, timeout=180, cancel_check=cancel_check).returncode != 0:
         raise RuntimeError("Failed to decode audio stream for stem separation.")
     return dst
 
 
-def _read_pcm16(path: Path) -> tuple[array, int, int]:
+def _read_pcm16(path: Path) -> tuple[np.ndarray, int, int]:
     with wave.open(str(path), "rb") as wf:
-        sr, ch, frames = wf.getframerate(), wf.getnchannels(), wf.readframes(wf.getnframes())
-    (pcm := array("h")).frombytes(frames[: (len(frames) // 2) * 2])
-    return pcm, sr, ch
+        raw = wf.readframes(wf.getnframes())
+        return np.frombuffer(raw[: (len(raw) // 2) * 2], dtype=np.int16).copy(), wf.getframerate(), wf.getnchannels()
 
 
-def _write_pcm16(path: Path, pcm: array, sr: int, ch: int) -> None:
+def _write_pcm16(path: Path, pcm: np.ndarray | Any, sr: int, ch: int) -> None:
     with wave.open(str(path), "wb") as wf:
         wf.setparams((ch, 2, sr, len(pcm) // max(1, ch), "NONE", "not compressed"))
-        wf.writeframes(pcm.tobytes())
+        wf.writeframes(pcm.tobytes() if hasattr(pcm, "tobytes") else bytes(pcm))
 
 
 def _find_separator_bin() -> str | None:
-    local = Path(sys.executable).resolve().parent / ("audio-separator.exe" if sys.platform == "win32" else "audio-separator")
-    return str(local) if local.is_file() else shutil.which("audio-separator")
+    exe = "audio-separator.exe" if sys.platform == "win32" else "audio-separator"
+    return str(loc) if (loc := Path(sys.executable).resolve().parent / exe).is_file() else shutil.which("audio-separator")
 
 
 def _ffmpeg_exe() -> str | None:

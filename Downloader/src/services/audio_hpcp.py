@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-import cmath
 import math
+from typing import Sequence
+
+import numpy as np
 
 ESSENTIA_KEYS = ("A", "A#", "B", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#")
 BGATE_M = (1.00, 0.00, 0.42, 0.00, 0.53, 0.37, 0.00, 0.77, 0.00, 0.38, 0.21, 0.30)
@@ -13,49 +15,48 @@ _N = 4096
 _SPEC_SIZE = _N // 2 + 1
 
 
-def _bit_reverse(n: int) -> list[int]:
-    bits = n.bit_length() - 1
-    return [int(f"{i:0{bits}b}"[::-1], 2) for i in range(n)]
-
-
-def _build_sw_bands() -> list[tuple[int, int, list[float]]]:
-    bands: list[tuple[int, int, list[float]]] = []
+def _build_sw_bands() -> list[tuple[int, int, np.ndarray]]:
+    bands: list[tuple[int, int, np.ndarray]] = []
     for idx_pt in range(71):
         freq = 50.0 * idx_pt
         bf, ef = freq - max(50.0, freq * 0.34), freq + max(50.0, freq * 0.58)
         b = max(0, min(_SPEC_SIZE - 1, int(bf / 8000.0 * (_SPEC_SIZE - 1.0) + 0.5)))
         e = max(b + 1, min(_SPEC_SIZE, int(ef / 8000.0 * (_SPEC_SIZE - 1.0) + 0.5)))
         c, hw = 0.5 * (b + e), e - 0.5 * (b + e)
-        bands.append((b, e, [((1.0 - abs(k - c) / hw) ** 4) for k in range(b, e)]))
+        k = np.arange(b, e, dtype=np.float64)
+        bands.append((b, e, ((1.0 - np.abs(k - c) / hw) ** 4)))
     return bands
 
 
-_REV = _bit_reverse(_N)
-_TWIDDLES = [[cmath.exp(-1j * math.pi * k / h) for k in range(h)] for h in (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048)]
-_HANN = [0.5 - 0.5 * math.cos(2.0 * math.pi * i / (_N - 1)) for i in range(_N)]
-_WIN = [w * (2.0 / sum(_HANN)) for w in _HANN]
+_HANN = np.hanning(_N)
+_WIN = _HANN * (2.0 / float(np.sum(_HANN)))
 _SW_BANDS = _build_sw_bands()
 
 
-def extract_key_candidates(samples: list[float], sr: int = 16000) -> list[dict]:
+def extract_key_candidates(samples: Sequence[float] | np.ndarray, sr: int = 16000) -> list[dict]:
     return extract_key_and_sections(samples, sr)[0]
 
 
-def extract_key_and_sections(samples: list[float], sr: int = 16000) -> tuple[list[dict], str, str]:
-    padded = [0.0] * (_N // 2) + samples + [0.0] * (_N // 2)
+def extract_key_and_sections(
+    samples: Sequence[float] | np.ndarray, sr: int = 16000,
+) -> tuple[list[dict], str, str]:
+    arr = np.asarray(samples, dtype=np.float32)
+    padded = np.pad(arr, _N // 2)
     stride = _N if len(padded) <= 64 * _N else max(_N, (len(padded) - _N) // 64)
     starts = list(range(0, max(1, len(padded) - _N + 1), stride))
     hp1, hp2, mid = [0.0] * 12, [0.0] * 12, max(1, len(starts) // 2)
     for idx in range(0, len(starts), 2):
         s1, dst1 = starts[idx], (hp1 if idx < mid else hp2)
-        f1 = [padded[s1 + i] * _WIN[i] for i in range(_N)]
+        f1 = padded[s1 : s1 + _N] * _WIN
         if idx + 1 < len(starts):
             s2 = starts[idx + 1]
-            sp1, sp2 = _fft_pair_mag(f1, [padded[s2 + i] * _WIN[i] for i in range(_N)])
+            f2 = padded[s2 : s2 + _N] * _WIN
+            sp1, sp2 = _fft_pair_mag(f1, f2)
             _accumulate_frame_hpcp(sp1, float(sr), dst1)
             _accumulate_frame_hpcp(sp2, float(sr), hp1 if (idx + 1) < mid else hp2)
         else:
-            _accumulate_frame_hpcp(_fft_pair_mag(f1, [0.0] * _N)[0], float(sr), dst1)
+            sp1 = np.abs(np.fft.rfft(f1)[:1425])
+            _accumulate_frame_hpcp(sp1, float(sr), dst1)
     full = _correlate_bgate(_gate_pcp([hp1[i] + hp2[i] for i in range(12)]))
     k1 = _correlate_bgate(_gate_pcp(hp1))[0]["key"] if max(hp1) > 0 else full[0]["key"]
     k2 = _correlate_bgate(_gate_pcp(hp2))[0]["key"] if max(hp2) > 0 else full[0]["key"]
@@ -67,23 +68,15 @@ def _gate_pcp(hpcp: list[float]) -> list[float]:
     return [v / mx if (v / mx) >= 0.2 else 0.0 for v in hpcp]
 
 
-def _fft_pair_mag(x1: list[float], x2: list[float]) -> tuple[list[float], list[float]]:
-    buf = [complex(x1[idx], x2[idx]) for idx in _REV]
-    for stage, tw in enumerate(_TWIDDLES):
-        half, step = 1 << stage, 2 << stage
-        for base in range(0, _N, step):
-            for k in range(half):
-                t, u = tw[k] * buf[base + k + half], buf[base + k]
-                buf[base + k + half], buf[base + k] = u - t, u + t
-    m1, m2 = [0.0] * 1425, [0.0] * 1425
-    m1[0], m2[0] = abs(buf[0].real), abs(buf[0].imag)
-    for k in range(1, 1425):
-        zk, z_nk = buf[k], buf[_N - k].conjugate()
-        m1[k], m2[k] = 0.5 * abs(zk + z_nk), 0.5 * abs(zk - z_nk)
+def _fft_pair_mag(
+    x1: Sequence[float] | np.ndarray, x2: Sequence[float] | np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    m1 = np.abs(np.fft.rfft(x1)[:1425])
+    m2 = np.abs(np.fft.rfft(x2)[:1425])
     return m1, m2
 
 
-def _accumulate_frame_hpcp(spec: list[float], sr: float, hpcp: list[float]) -> None:
+def _accumulate_frame_hpcp(spec: np.ndarray | Sequence[float], sr: float, hpcp: list[float]) -> None:
     lo_b, hi_b = max(1, int(math.ceil(25.0 * _N / sr))), min(len(spec) - 2, int(math.floor(3500.0 * _N / sr)))
     peaks: list[tuple[float, float]] = []
     for b in range(lo_b, hi_b + 1):
@@ -97,7 +90,7 @@ def _accumulate_frame_hpcp(spec: list[float], sr: float, hpcp: list[float]) -> N
                 peaks.append((10.0 ** ((bt - 0.25 * (a - g) * p) / 20.0), pf))
     if peaks:
         peaks.sort(reverse=True)
-        _whiten_to_hpcp(spec, peaks[:60], hpcp)
+        _whiten_to_hpcp(np.asarray(spec, dtype=np.float64), peaks[:60], hpcp)
 
 
 def _estimate_ref_hz(peaks: list[tuple[float, float]]) -> float:
@@ -108,13 +101,15 @@ def _estimate_ref_hz(peaks: list[tuple[float, float]]) -> float:
     return 440.0 * (2.0 ** (max(-0.45, min(0.45, dev)) / 12.0))
 
 
-def _whiten_to_hpcp(spec: list[float], peaks: list[tuple[float, float]], hpcp: list[float]) -> None:
-    spec_e, ref_hz = [s * s for s in spec], _estimate_ref_hz(peaks)
+def _whiten_to_hpcp(spec: np.ndarray, peaks: list[tuple[float, float]], hpcp: list[float]) -> None:
+    spec_e, ref_hz = spec * spec, _estimate_ref_hz(peaks)
     y_db: list[float] = []
     for b, e, weights in _SW_BANDS:
-        num = sum(se * se * w4 for se, w4 in zip(spec_e[b:e], weights))
-        den = sum(se * w4 for se, w4 in zip(spec_e[b:e], weights))
-        y_db.append(20.0 * math.log10(max(1e-20, math.sqrt(max(0.0, num / den if den > 0.0 else 0.0)))))
+        se = spec_e[b:e]
+        den = float(np.sum(se * weights))
+        num = float(np.sum(se * se * weights))
+        val = math.sqrt(max(0.0, num / den if den > 0.0 else 0.0))
+        y_db.append(20.0 * math.log10(max(1e-20, val)))
     y_db[-1] = y_db[-2]
     for mag, freq in peaks:
         amp, pos = 20.0 * math.log10(max(1e-20, mag)), max(0.0, min(69.9999, freq / 50.0))
@@ -141,9 +136,10 @@ def _correlate_bgate(pcp: list[float]) -> list[dict]:
     return out
 
 
-def _pearson12(x: list[float], y: tuple[float, ...]) -> float:
-    mx, my = sum(x) / 12.0, sum(y) / 12.0
-    num = sum((x[i] - mx) * (y[i] - my) for i in range(12))
-    dx = math.sqrt(sum((x[i] - mx) ** 2 for i in range(12)))
-    dy = math.sqrt(sum((y[i] - my) ** 2 for i in range(12)))
-    return num / (dx * dy + 1e-12)
+def _pearson12(x: list[float] | np.ndarray, y: tuple[float, ...] | np.ndarray) -> float:
+    xa, ya = np.asarray(x, dtype=np.float64), np.asarray(y, dtype=np.float64)
+    mx, my = float(np.mean(xa)), float(np.mean(ya))
+    dxa, dya = xa - mx, ya - my
+    num = float(np.dot(dxa, dya))
+    den = math.sqrt(float(np.dot(dxa, dxa))) * math.sqrt(float(np.dot(dya, dya)))
+    return float(num / (den + 1e-12))
