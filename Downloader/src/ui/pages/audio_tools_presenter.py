@@ -12,6 +12,7 @@ from src.services.audio_pitch import build_export_filename
 from src.services.audio_stems import STEM_MODES
 from src.services.platform_actions import open_parent
 from src.ui.components.controls import ComboBox, PushButton, ToolButton
+from src.ui.i18n import tr
 from src.ui.theme.key_colors import apply_key_property
 from src.ui.workers.stem_worker import StemSeparationWorker, StemSignals
 
@@ -94,7 +95,7 @@ def start_stem_separation(page) -> None:
         return
     page._busy, page._stemSignals = True, StemSignals()
     mode = str(page.stemModeCombo.currentData() or "roformer_ensemble")
-    page.statusLabel.setText("Separating Vocals & Instrumental (Phase-Locked)…")
+    page.statusLabel.setText(tr("at.separating", getattr(page, "_lang", "en")))
     page.separateStemsBtn.setEnabled(False)
     page._stemSignals.separated.connect(lambda v, i, m: on_stems_ready(page, v, i, m))
     page._stemSignals.error.connect(page._on_error)

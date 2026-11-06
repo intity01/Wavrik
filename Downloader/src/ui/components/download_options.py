@@ -22,6 +22,8 @@ class DownloadOptions(QFrame):
         super().__init__(parent)
         self._cfg = config
         self._lang = "en"
+        self._last_count = 0
+        self._last_can_download = False
         self.setObjectName("DownloadOptions")
         build(self)
         self._restore_default()
@@ -29,6 +31,7 @@ class DownloadOptions(QFrame):
     def setLanguage(self, lang: str) -> None:
         self._lang = lang
         set_language(self, lang)
+        self.setQueueState(self._last_count, self._last_can_download)
 
     def _restore_default(self) -> None:
         preset = getPreset(self._cfg.get("defaultPreset"))
@@ -88,6 +91,8 @@ class DownloadOptions(QFrame):
         return str(self.engineCombo.currentData() or "auto")
 
     def setQueueState(self, count: int, can_download: bool) -> None:
+        self._last_count = count
+        self._last_can_download = can_download
         self.downloadAllButton.setVisible(count > 0)
         self.downloadAllButton.setEnabled(count > 0 and can_download)
         suffix = "" if count == 1 else "s"

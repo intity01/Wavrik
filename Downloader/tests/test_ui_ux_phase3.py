@@ -59,6 +59,11 @@ def test_download_options_layout_and_keyboard(qtbot, config, logger, fake_downlo
     assert opt.pathInput.focusPolicy() == Qt.FocusPolicy.NoFocus
     assert opt.layout().count() >= 3
 
+    # Tab order verification on AudioTools
+    at = win.pageAudioTools
+    assert at.chooseFileBtn.nextInFocusChain() is not None
+    assert at.stemModeCombo.nextInFocusChain() is not None
+
 
 def test_library_cache_bounded_lru(history, config):
     from src.ui.pages.library_page import LibraryInterface
@@ -86,5 +91,50 @@ def test_cascading_language_switch(qtbot, config, logger, fake_downloader, histo
     assert win.pageWorkspace.inputBar.addButton.text() == "เพิ่มลงคิว"
     assert win.pageWorkspace.downloadOptions.browseButton.text() == "เปลี่ยนโฟลเดอร์"
     assert win.pageWorkspace.downloadOptions.advancedButton.text() == "ตัวเลือกเพิ่มเติม"
+    assert win.pageWorkspace.downloadOptions.downloadAllButton.text() == "ดาวน์โหลดทั้งหมด"
     assert win.pageAudioTools.exportBtn.text() == "ส่งออกไฟล์ผลลัพธ์"
     assert win.pageAudioTools.chooseFileBtn.text() == "เลือกไฟล์เสียง"
+    assert win.pageAudioTools.outputPreviewLabel.text() == "ไฟล์ต้นฉบับจะไม่ถูกเขียนทับเด็ดขาด"
+    assert win.pageAudioTools.statusLabel.text() == "เลือกไฟล์เสียงเพื่อเริ่มต้นใช้งาน"
+    assert win.pageAudioTools.badgeLabel.text() == "ผลประมาณการ"
+
+    # Test QueueItemCard localization
+    win.pageWorkspace.addUrl("https://youtube.com/watch?v=12345678901")
+    card = list(win.pageWorkspace._cards.values())[0]
+    assert card._title.text() == "กำลังอ่านข้อมูลสื่อ"
+    assert card._lblStatus.text() == "กำลังอ่านข้อมูลสื่อ"
+    assert card._lblMeta.text() == "กำลังรอข้อมูลสื่อ"
+    assert card._btnDl.text() == "ดาวน์โหลด"
+    assert card._btnDel.text() == "ลบออก"
+    assert win.pageWorkspace.downloadOptions.downloadAllButton.text() == "ดาวน์โหลดทั้งหมด (1)"
+
+    # Switch back to English and verify full update
+    win._apply_language("en")
+    assert win.pageWorkspace.downloadOptions.downloadAllButton.text() == "Download all (1)"
+    assert card._btnDl.text() == "Download"
+    assert card._btnDel.text() == "Remove"
+    assert card._title.text() == "Reading media information"
+    assert card._lblStatus.text() == "Reading media information"
+    assert card._lblMeta.text() == "Waiting for metadata"
+    assert win.pageAudioTools.outputPreviewLabel.text() == "Original file is never overwritten."
+
+
+def test_library_card_and_empty_state_localization(history, config):
+    from src.ui.components.empty_state import EmptyState
+    from src.ui.components.library_card import LibraryCard
+    card = LibraryCard({"title": "Song", "status": "completed", "filePath": "a.mp3", "mediaType": "audio", "fileSize": 1048576})
+    card.setLanguage("th")
+    assert card.status.text() == "สำเร็จ"
+    assert "ไฟล์เสียง" in card.metadata.text()
+    card.setLanguage("en")
+    assert card.status.text() == "Completed"
+    assert "Audio" in card.metadata.text()
+
+    # EmptyState first-run vs subsequent run
+    config.set("firstRun", True)
+    es = EmptyState(config)
+    assert not any(c.isHidden() for c in es._cards)
+    config.set("firstRun", False)
+    es.setLanguage("th")
+    assert all(c.isHidden() for c in es._cards)
+    assert es.title.text() == "คิวดาวน์โหลดว่างเปล่า"

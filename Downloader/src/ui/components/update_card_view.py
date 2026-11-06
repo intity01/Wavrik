@@ -16,7 +16,7 @@ def build(card) -> None:
     card.title = QLabel("Software updates", objectName="SectionTitle")
     card.current = QLabel(f"Installed version: {card._manager.getCurrentVersion()}", objectName="MutedText")
     configured = card._manager.isConfigured
-    message = "Updates are checked through GitHub Releases." if configured else "Updates are not configured for this build."
+    message = tr("set.updates_configured", "en") if configured else tr("set.updates_not_configured", "en")
     card.statusLabel = QLabel(message, objectName="MutedText", wordWrap=True)
     card.startupCheck = ToggleButton("Check for updates at startup")
     card.startupCheck.setChecked(card._cfg.get("checkUpdatesOnStartup", False))
@@ -76,3 +76,8 @@ def set_language(card, lang: str) -> None:
     card.releaseButton.setText(tr("set.open_release", lang))
     card.downloadButton.setText(tr("set.download_verified", lang))
     card.folderButton.setText(tr("set.open_download_folder", lang))
+    if not card._info and not card._busy:
+        k = "set.updates_configured" if card._manager.isConfigured else "set.updates_not_configured"
+        card.statusLabel.setText(tr(k, lang))
+    elif card._info and not card._busy:
+        card.statusLabel.setText(card._update_message(card._info))

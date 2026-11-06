@@ -50,8 +50,7 @@ class WorkspaceInterface(WorkspaceInteractionMixin, QWidget):
         if url in self._cards:
             self.inputBar.showError(tr("input.err_duplicate_url", self._lang))
             return
-        card = QueueItemCard(url, self._cfg, self.downloadOptions.currentPresetKey(), self.downloadOptions.currentEngine())
-        card.setLanguage(self._lang)
+        card = QueueItemCard(url, self._cfg, self.downloadOptions.currentPresetKey(), self.downloadOptions.currentEngine(), lang=self._lang)
         card.removeRequested.connect(self._removeCard)
         card.downloadRequested.connect(self._startDownload)
         card.cancelRequested.connect(self._cancelDownload)
@@ -87,7 +86,7 @@ class WorkspaceInterface(WorkspaceInteractionMixin, QWidget):
             worker.cancel()
             card = self._cards.get(url)
             if card:
-                card.setStatus("cancelled", "Cancelling")
+                card.setStatus("cancelled", tr("queue.cancelling", self._lang))
                 card.setActionEnabled(False)
         self._updateEmptyState()
 

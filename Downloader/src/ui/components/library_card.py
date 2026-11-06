@@ -33,7 +33,7 @@ class LibraryCard(QWidget):
         row.setSpacing(12)
         row.addLayout(self._build_title_col(), 4)
         row.addWidget(self._build_harmony_col(), 0)
-        self.status = QLabel(_status_text(entry), wordWrap=True)
+        self.status = QLabel(_status_text(entry, self._lang), wordWrap=True)
         self.status.setProperty("status", entry.get("status", "failed"))
         row.addWidget(self.status, 2)
         self._add_actions(row)
@@ -72,6 +72,7 @@ class LibraryCard(QWidget):
         self._lang = lang
         for btn, k in self._action_buttons:
             btn.setText(tr(k, lang))
+        self.status.setText(_status_text(self._entry, lang))
         self.metadata.setText(_metadata_text(self._entry, self._analysis, lang))
         self.harmonyBadge.setText(_harmony_text(self._entry, self._analysis, self._is_audio_entry(), lang))
 
@@ -120,15 +121,20 @@ def _harmony_text(entry: dict, analysis: dict, is_audio: bool, lang: str = "en")
 
 def _metadata_text(entry: dict, analysis: dict, lang: str = "en") -> str:
     ts = entry.get("timestamp", "").replace("T", " ")[:16]
-    base = f"{ts} · {entry.get('mediaType', 'unknown').title()} · {_format_size(int(entry.get('fileSize', 0) or 0), lang)}"
+    m_raw = entry.get("mediaType", "audio")
+    m_lbl = tr("lib.filter_audio" if m_raw == "audio" else "lib.filter_video", lang)
+    base = f"{ts} · {m_lbl} · {_format_size(int(entry.get('fileSize', 0) or 0), lang)}"
     if analysis.get("key"):
         conf = f" [{analysis['confidence']}%]" if analysis.get("confidence") else ""
-        return f"{base} · Key: {analysis['key']} ({analysis.get('camelot', '--')}) · {float(analysis.get('bpm', 0.0)):.1f} BPM{conf}"
+        return f"{base} · {analysis['key']} ({analysis.get('camelot', '--')}) · {float(analysis.get('bpm', 0.0)):.1f} BPM{conf}"
     return base
 
 
-def _status_text(entry: dict) -> str:
-    st, err = entry.get("status", "failed").title(), entry.get("error", "")
+def _status_text(entry: dict, lang: str = "en") -> str:
+    raw = entry.get("status", "failed")
+    key = f"lib.filter_{raw}" if f"lib.filter_{raw}" in ("lib.filter_completed", "lib.filter_failed", "lib.filter_cancelled") else None
+    st = tr(key, lang) if key else raw.title()
+    err = entry.get("error", "")
     return f"{st}: {err}" if err else st
 
 

@@ -12,6 +12,7 @@ from src.services.audio_pitch import unique_export_path
 from src.ui.components.audio_transport import AudioTransportController
 from src.ui.components.batch_audio_dialog import BatchAudioDialog
 from src.ui.dialogs import get_open_file_path, get_open_files
+from src.ui.i18n import tr
 from src.ui.workers.audio_worker import AnalyzeAudioWorker, AudioToolSignals, PitchJob, RenderPitchWorker
 
 from .audio_tools_presenter import (
@@ -46,7 +47,7 @@ class AudioToolsInterface(QWidget):
         set_language(self, lang)
     def loadFile(self, path: str | Path, cached: dict | None = None) -> None:
         if not (cand := Path(path)).is_file():
-            return self.statusLabel.setText("Selected audio file does not exist.")
+            return self.statusLabel.setText(tr("at.file_not_exist", getattr(self, "_lang", "en")))
         self._source, self._busy = cand, False
         self.transport.setSlotA(cand) or self.fileLabel.setText(f"{cand.name} ({cand.parent})")
         self._set_controls_enabled(True) or self._update_preview_labels()
@@ -63,7 +64,7 @@ class AudioToolsInterface(QWidget):
     def _reanalyze(self) -> None:
         if self._source and not self._busy:
             self._busy, self._signals = True, AudioToolSignals()
-            self.statusLabel.setText("Analyzing Key, Waveform & BPM…")
+            self.statusLabel.setText(tr("at.analyzing", getattr(self, "_lang", "en")))
             self._signals.analyzed.connect(self._on_analyzed)
             self._signals.error.connect(self._on_error)
             self._activeWorker = AnalyzeAudioWorker(self._source, self._signals)
@@ -94,7 +95,7 @@ class AudioToolsInterface(QWidget):
             self.transport.playSlot("A", self.waveformWidget.seekPosition())
             self.statusLabel.setText(f"Playing Original (A): {self._source.name}")
     def _stop_playback(self) -> None:
-        self.transport.stop() or self.statusLabel.setText("Playback stopped.")
+        self.transport.stop() or self.statusLabel.setText(tr("at.playback_stopped", getattr(self, "_lang", "en")))
     def _preview_shifted(self) -> None:
         if self._source and not self._busy:
             (d := Path(tempfile.gettempdir()) / "WavrikPreview").mkdir(parents=True, exist_ok=True)
@@ -105,7 +106,7 @@ class AudioToolsInterface(QWidget):
 
     def _start_render(self, target: Path, fmt: str, is_preview: bool) -> None:
         self._busy, self._signals = True, AudioToolSignals()
-        self.statusLabel.setText("Rendering audio with Rubber Band…") or self.exportBtn.setEnabled(False)
+        self.statusLabel.setText(tr("at.rendering", getattr(self, "_lang", "en"))) or self.exportBtn.setEnabled(False)
         self._signals.rendered.connect(self._on_rendered)
         self._signals.error.connect(self._on_error)
         job = PitchJob(self._source, target, self.semitoneSpin.value(), str(self.engineCombo.currentData() or "r3_finer"), fmt, is_preview, self._tempo_ratio(), self.waveformWidget.seekPosition())

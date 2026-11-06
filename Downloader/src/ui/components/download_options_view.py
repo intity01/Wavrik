@@ -122,6 +122,7 @@ def set_language(options, lang: str) -> None:
     options.lblFolder.setText(tr("dl.folder_label", lang).upper())
     options.browseButton.setText(tr("dl.change_folder", lang))
     options.advancedButton.setText(tr("dl.advanced_options", lang))
+    options.downloadAllButton.setText(tr("dl.download_all", lang))
     for i in range(options.mediaCombo.count()):
         k = options.mediaCombo.itemData(i)
         options.mediaCombo.setItemText(i, tr(f"dl.media_{k}", lang))

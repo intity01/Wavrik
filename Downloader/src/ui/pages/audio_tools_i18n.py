@@ -9,7 +9,12 @@ def wire_tab_order(page) -> None:
     page.setTabOrder(page.chooseFileBtn, page.batchBtn)
     page.setTabOrder(page.batchBtn, page.reanalyzeBtn)
     page.setTabOrder(page.reanalyzeBtn, page.detectedKeyCombo)
-    page.setTabOrder(page.detectedKeyCombo, page.semitoneSpin)
+    if hasattr(page, "stemModeCombo") and hasattr(page, "separateStemsBtn"):
+        page.setTabOrder(page.detectedKeyCombo, page.stemModeCombo)
+        page.setTabOrder(page.stemModeCombo, page.separateStemsBtn)
+        page.setTabOrder(page.separateStemsBtn, page.semitoneSpin)
+    else:
+        page.setTabOrder(page.detectedKeyCombo, page.semitoneSpin)
     page.setTabOrder(page.semitoneSpin, page.bpmSpin)
     page.setTabOrder(page.bpmSpin, page.targetBpmSpin)
     page.setTabOrder(page.targetBpmSpin, page.engineCombo)
@@ -26,6 +31,9 @@ def set_language(page, lang: str) -> None:
     page.subtitleLabel.setText(tr("at.subtitle", lang))
     if not page._source:
         page.fileLabel.setText(tr("at.no_file", lang))
+        page.outputPreviewLabel.setText(tr("at.safe_notice", lang))
+        page.statusLabel.setText(tr("at.load_to_begin", lang))
+    page.badgeLabel.setText(tr("at.experimental_badge", lang))
     page.lblSource.setText(tr("at.field_source", lang))
     page.chooseFileBtn.setText(tr("at.choose_file", lang))
     page.batchBtn.setText(tr("at.batch_process", lang))

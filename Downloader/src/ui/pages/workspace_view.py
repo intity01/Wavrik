@@ -121,3 +121,5 @@ def set_language(workspace, lang: str) -> None:
     count = len(getattr(workspace, "_cards", {}))
     tpl = tr("dl.queue_count_1" if count == 1 else "dl.queue_count", lang)
     workspace.queueCount.setText(tpl.replace("{count}", str(count)))
+    if hasattr(workspace, "_updateEmptyState"):
+        workspace._updateEmptyState()

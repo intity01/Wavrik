@@ -20,6 +20,7 @@ class EmptyState(QWidget):
         self._cfg = config
         self._is_first_run = bool(config and config.get("firstRun", True))
         self._step_labels: list[tuple[QLabel, QLabel, str]] = []
+        self._cards: list[QFrame] = []
         self._tip: QLabel | None = None
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 14, 10, 14)
@@ -29,18 +30,22 @@ class EmptyState(QWidget):
         self.subtitle = QLabel(objectName="PageSubtitle")
         layout.addWidget(self.title)
         layout.addWidget(self.subtitle)
-        if self._is_first_run:
-            for number, h_key, b_key in _STEPS:
-                card, title_lbl, desc_lbl = _step_row(number, h_key, b_key)
-                self._step_labels.append((title_lbl, desc_lbl, number))
-                layout.addWidget(card)
-            self._tip = QLabel(objectName="MutedText", wordWrap=True)
-            layout.addWidget(self._tip)
+        for number, h_key, b_key in _STEPS:
+            card, title_lbl, desc_lbl = _step_row(number, h_key, b_key)
+            self._step_labels.append((title_lbl, desc_lbl, number))
+            self._cards.append(card)
+            layout.addWidget(card)
+        self._tip = QLabel(objectName="MutedText", wordWrap=True)
+        layout.addWidget(self._tip)
         layout.addStretch(1)
         self.setLanguage("en")
 
     def setLanguage(self, lang: str) -> None:
         self._is_first_run = bool(self._cfg and self._cfg.get("firstRun", True))
+        for card in self._cards:
+            card.setVisible(self._is_first_run)
+        if self._tip:
+            self._tip.setVisible(self._is_first_run)
         if self._is_first_run:
             self.title.setText(tr("empty.first_run_title", lang))
             self.subtitle.setText(tr("empty.first_run_subtitle", lang))
