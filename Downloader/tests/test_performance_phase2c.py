@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import math
 from pathlib import Path
+import subprocess
 import sys
 import time
 import wave
@@ -20,6 +21,7 @@ from src.services.audio_analysis import (
     analyze_audio_file,
 )
 from src.services.audio_dsp import (
+    _accumulate_window_bpm,
     _spectral_flux_onset,
     downsample_peaks,
     estimate_bpm,
@@ -30,6 +32,7 @@ from src.services.audio_hpcp import (
     extract_key_candidates,
 )
 from src.services.audio_stems import (
+    _prepare_master_wav,
     _read_pcm16,
     fuse_min_magnitude,
     phase_lock_stems,
@@ -85,6 +88,16 @@ def test_lazy_imports_media_downloader_and_cli():
     main.sys.stdout = buf_h
     assert main.main(["-h"]) == 0
     assert "usage:" in buf_h.getvalue().lower()
+
+    # Verify in a clean interpreter process that CLI commands do not import PyQt6 or yt_dlp
+    script = (
+        "import sys; sys.path.insert(0, 'Downloader'); import main; "
+        "main.main(['--version']); "
+        "assert 'PyQt6' not in sys.modules, 'PyQt6 eagerly imported'; "
+        "assert 'yt_dlp' not in sys.modules, 'yt_dlp eagerly imported'"
+    )
+    res = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=False)
+    assert res.returncode == 0, f"Clean CLI process failed: {res.stderr}"
 
 
 def test_requirements_and_spec_numpy_declaration():
@@ -265,4 +278,90 @@ def test_analyze_audio_file_end_to_end(tmp_path: Path):
     candidates = extract_key_candidates(samples, sr)
     assert len(candidates) > 0
     assert candidates[0]["key"] in {"C major", "A minor", "G major"}
+
+
+def test_fuse_min_magnitude_int16_overflow_protection(tmp_path: Path):
+    """Verify fuse_min_magnitude does not suffer from int16 -32768 two's-complement overflow."""
+    # -32768 in int16 has abs() == -32768 <= 0 if not cast to int32!
+    a = np.array([-32768, 100], dtype=np.int16)
+    b = np.array([0, 50], dtype=np.int16)
+
+    w1 = tmp_path / "neg_max.wav"
+    w2 = tmp_path / "silence.wav"
+    out = tmp_path / "fused_overflow.wav"
+
+    for path, data in ((w1, a), (w2, b)):
+        with wave.open(str(path), "wb") as wf:
+            wf.setparams((1, 2, 16000, len(data), "NONE", "not compressed"))
+            wf.writeframes(data.tobytes())
+
+    fuse_min_magnitude(w1, w2, out)
+    fused, _, _ = _read_pcm16(out)
+
+    # Minimum absolute magnitude between -32768 and 0 is 0, NOT -32768
+    assert fused[0] == 0
+    assert fused[1] == 50
+
+
+def test_dsp_accumulate_short_window_safety():
+    """Verify _accumulate_window_bpm gracefully handles windows shorter than min lag without IndexError."""
+    scores: dict[int, float] = {b: 0.0 for b in range(66, 180)}
+    _accumulate_window_bpm([], 125.0, scores)
+    _accumulate_window_bpm([1.0], 125.0, scores)
+    _accumulate_window_bpm(np.ones(10, dtype=np.float64), 125.0, scores)
+    # All scores should remain 0 without crashing
+    assert all(v == 0.0 for v in scores.values())
+
+
+def test_downsample_peaks_zero_or_negative_count():
+    """Verify downsample_peaks returns empty list on zero or negative count without ZeroDivisionError."""
+    samples = np.ones(100, dtype=np.float32)
+    assert downsample_peaks(samples, 0) == []
+    assert downsample_peaks(samples, -5) == []
+
+
+def test_estimate_bpm_and_hpcp_2d_stereo_downmix():
+    """Verify estimate_bpm and extract_key_and_sections handle 2D multi-channel arrays."""
+    sr = 16000
+    n_samples = sr * 4
+    t = np.arange(n_samples, dtype=np.float32) / float(sr)
+    sine = (0.5 * np.sin(2.0 * np.pi * 440.0 * t)).astype(np.float32)
+    stereo = np.column_stack([sine, sine])
+
+    # Should not raise ValueError about 2D window shapes or broadcasting
+    bpm = estimate_bpm(stereo, sr)
+    assert isinstance(bpm, float)
+
+    cands, k1, k2 = extract_key_and_sections(stereo, sr)
+    assert len(cands) > 0
+    assert "A" in cands[0]["key"]
+
+
+def test_audio_analysis_corrupted_or_empty_file_fallback(tmp_path: Path):
+    """Verify analyze_audio_file and fallback handle empty/corrupted files gracefully."""
+    empty_file = tmp_path / "corrupted.wav"
+    empty_file.write_bytes(b"")
+
+    samples, sr = _read_wav_fallback(empty_file, 10)
+    assert len(samples) == 0
+
+    res = analyze_audio_file(empty_file, 10)
+    assert res["status"] == "unavailable"
+    assert res["bpm"] == 120.0
+
+
+def test_prepare_master_wav_corrupted_file_fallback(tmp_path: Path):
+    """Verify _prepare_master_wav handles invalid WAV headers without unhandled EOFError."""
+    fake_wav = tmp_path / "bad.wav"
+    fake_wav.write_bytes(b"NOT A REAL RIFF HEADER")
+    dst = tmp_path / "dst.wav"
+
+    # Should fall back to ffmpeg normalization without raising wave.Error / EOFError
+    # (If ffmpeg is missing in test environment, it raises RuntimeError with clean message)
+    try:
+        norm_path, sr, ch = _prepare_master_wav(fake_wav, dst)
+        assert sr == 44100
+        assert ch == 2
+    except RuntimeError as exc:
+        assert "FFmpeg is required" in str(exc) or "Failed to decode" in str(exc)
 

@@ -48,6 +48,8 @@ def _parabolic_bpm_refine(bpm: int, scores: dict[int, float]) -> float:
 
 def _spectral_flux_onset(samples: Sequence[float] | np.ndarray, sr: int, win: int, hop: int) -> np.ndarray:
     arr = np.asarray(samples, dtype=np.float32)
+    if arr.ndim > 1:
+        arr = np.mean(arr, axis=1 if arr.shape[0] > arr.shape[1] else 0)
     n_frames = (len(arr) - win) // hop
     if n_frames <= 0:
         return np.array([], dtype=np.float32)
@@ -78,11 +80,15 @@ def _sharpen_onset(flux: np.ndarray, hw: int) -> np.ndarray:
 def _accumulate_window_bpm(w: Sequence[float] | np.ndarray, fps: float, scores: dict[int, float]) -> None:
     arr = np.asarray(w, dtype=np.float64)
     wn = len(arr)
+    if wn < 17:
+        return
     norm = math.sqrt(float(np.sum(arr * arr)) / max(1, wn))
     if norm < 1e-4:
         return
     wnorm = arr / norm
     max_lag = min(wn - 2, int(fps * 60.0 * 4.0 / 65.0) + 4)
+    if max_lag < 15:
+        return
     corr = np.correlate(wnorm, wnorm, mode="full")[wn - 1 : wn + max_lag]
     lags = np.arange(max_lag + 1)
     acf = corr / (wn - lags)
@@ -118,6 +124,8 @@ def _interp(acf: list[float] | np.ndarray, lag_f: float, max_lag: int) -> float:
 
 
 def downsample_peaks(samples: Sequence[float] | np.ndarray, count: int = 80) -> list[float]:
+    if count <= 0:
+        return []
     arr = np.abs(np.asarray(samples, dtype=np.float32))
     n = len(arr)
     if n == 0:

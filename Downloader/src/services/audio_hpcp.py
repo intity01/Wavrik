@@ -41,6 +41,8 @@ def extract_key_and_sections(
     samples: Sequence[float] | np.ndarray, sr: int = 16000,
 ) -> tuple[list[dict], str, str]:
     arr = np.asarray(samples, dtype=np.float32)
+    if arr.ndim > 1:
+        arr = np.mean(arr, axis=1 if arr.shape[0] > arr.shape[1] else 0)
     padded = np.pad(arr, _N // 2)
     stride = _N if len(padded) <= 64 * _N else max(_N, (len(padded) - _N) // 64)
     starts = list(range(0, max(1, len(padded) - _N + 1), stride))

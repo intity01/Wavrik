@@ -8,11 +8,19 @@ from pathlib import Path
 from src.core.config import Config
 from src.core.logger import Logger
 from src.core.runtime import application_root, find_deno, find_ffmpeg, resource_root
-from src.core.tray import TrayIcon
 from src.core.updater import UpdateManager
 from src.domain.media_downloader import MediaDownloader
 from src.services.history_manager import HistoryManager
-from src.ui.window_setup import WindowDependencies
+
+
+def __getattr__(name: str):
+    if name == "TrayIcon":
+        from src.core.tray import TrayIcon
+        return TrayIcon
+    if name == "WindowDependencies":
+        from src.ui.window_setup import WindowDependencies
+        return WindowDependencies
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _create_app():
@@ -51,15 +59,19 @@ def _attach_console() -> None:
             pass
 
 
+def _mod_attr(name: str):
+    return getattr(sys.modules[__name__], name)
+
+
 def _test_startup() -> int:
     config = Config()
     logger = Logger(logDir=config.appDataDir / "logs")
     try:
-        tray = TrayIcon()
+        tray = _mod_attr("TrayIcon")()
         downloader = MediaDownloader(logger, config)
         updater = UpdateManager(Config.VERSION, Config.GITHUB_REPO, logger)
         history = HistoryManager(config, logger)
-        WindowDependencies(
+        _mod_attr("WindowDependencies")(
             config=config, logger=logger, downloader=downloader,
             updater=updater, tray=tray, history=history,
         )
@@ -108,9 +120,9 @@ def main(argv: list[str] | None = None) -> int:
     config = Config()
     logger = Logger(logDir=config.appDataDir / "logs")
     install_crash_handler(logger)
-    tray = TrayIcon()
+    tray = _mod_attr("TrayIcon")()
     tray.start()
-    deps = WindowDependencies(
+    deps = _mod_attr("WindowDependencies")(
         config=config, logger=logger,
         downloader=MediaDownloader(logger, config),
         updater=UpdateManager(Config.VERSION, Config.GITHUB_REPO, logger),

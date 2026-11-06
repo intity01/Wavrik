@@ -42,10 +42,8 @@ def separate_stems(
             raise RuntimeError("Stem separation cancelled.")
         tmp_v, tmp_i = stage / "v.wav", stage / "i.wav"
         phase_lock_stems(master_wav, raw_inst, tmp_v, tmp_i, cancel_check)
-        if is_cancellation_requested(cancel_check):
-            raise RuntimeError("Stem separation cancelled.")
-        for s_tmp, s_dst in ((tmp_v, voc_dst), (tmp_i, inst_dst)):
-            os.replace(s_tmp, s_dst)
+        os.replace(tmp_v, voc_dst)
+        os.replace(tmp_i, inst_dst)
     return StemResult(vocals_path=voc_dst, instrumental_path=inst_dst, mode_used=actual_mode)
 
 
@@ -71,7 +69,7 @@ def fuse_min_magnitude(inst_a: Path, inst_b: Path, out_wav: Path) -> Path:
     pcm_a, sr, ch = _read_pcm16(inst_a)
     pcm_b, _, _ = _read_pcm16(inst_b)
     n = min(len(pcm_a), len(pcm_b))
-    _write_pcm16(out_wav, np.where(np.abs(pcm_a[:n]) <= np.abs(pcm_b[:n]), pcm_a[:n], pcm_b[:n]), sr, ch)
+    _write_pcm16(out_wav, np.where(np.abs(pcm_a[:n].astype(np.int32)) <= np.abs(pcm_b[:n].astype(np.int32)), pcm_a[:n], pcm_b[:n]), sr, ch)
     return out_wav
 
 
@@ -91,8 +89,7 @@ def _try_roformer_cli(sep_bin: str, master_wav: Path, stage: Path, mode: str, sr
 
 def _run_sep_model(sep_bin: str, master_wav: Path, out_dir: Path, model: str, sr_ch: tuple[int, int], cancel_check: Any = None) -> Path | None:
     out_dir.mkdir(parents=True, exist_ok=True)
-    m_dir = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "MediaDownloaderPRO" / "models"
-    m_dir.mkdir(parents=True, exist_ok=True)
+    (m_dir := Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "MediaDownloaderPRO" / "models").mkdir(parents=True, exist_ok=True)
     cmd = [sep_bin, str(master_wav), "-m", model, "--model_file_dir", str(m_dir), "--output_dir", str(out_dir), "--single_stem", "Instrumental", "--use_autocast"]
     proc = run_cancellable_process(cmd, timeout=900, cancel_check=cancel_check)
     cands = sorted(out_dir.glob("*Instrumental*.wav"))
@@ -112,9 +109,12 @@ def _extract_inst_dsp(master_wav: Path, out_wav: Path, sr_ch: tuple[int, int], c
 
 def _prepare_master_wav(src: Path, dst: Path, cancel_check: Any = None) -> tuple[Path, int, int]:
     if src.suffix.lower() == ".wav":
-        with wave.open(str(src), "rb") as wf:
-            if wf.getsampwidth() == 2 and wf.getnchannels() in (1, 2):
-                return src, wf.getframerate(), wf.getnchannels()
+        try:
+            with wave.open(str(src), "rb") as wf:
+                if wf.getsampwidth() == 2 and wf.getnchannels() in (1, 2):
+                    return src, wf.getframerate(), wf.getnchannels()
+        except Exception:
+            pass
     return _normalize_wav_spec(src, dst, (44100, 2), cancel_check), 44100, 2
 
 

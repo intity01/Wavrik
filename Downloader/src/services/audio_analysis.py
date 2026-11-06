@@ -135,12 +135,13 @@ def _decode_mono_samples(path: Path, max_seconds: int) -> tuple[np.ndarray, int]
 
 
 def _read_wav_fallback(path: Path, max_seconds: int) -> tuple[np.ndarray, int]:
-    with wave.open(str(path), "rb") as wf:
-        sr, ch, width = wf.getframerate(), wf.getnchannels(), wf.getsampwidth()
-        raw = wf.readframes(min(wf.getnframes(), sr * max_seconds))
-    if width != 2 or not raw:
+    try:
+        with wave.open(str(path), "rb") as wf:
+            sr, ch, width = wf.getframerate(), wf.getnchannels(), wf.getsampwidth()
+            raw = wf.readframes(min(wf.getnframes(), sr * max_seconds))
+        if width != 2 or not raw:
+            return np.array([], dtype=np.float32), 16000
+        pcm = np.frombuffer(raw[: (len(raw) // 2) * 2], dtype=np.int16)
+        return (pcm[::ch] if ch > 1 else pcm).astype(np.float32) * (1.0 / 32768.0), sr
+    except Exception:
         return np.array([], dtype=np.float32), 16000
-    pcm = np.frombuffer(raw[: (len(raw) // 2) * 2], dtype=np.int16)
-    if ch > 1:
-        pcm = pcm[::ch]
-    return pcm.astype(np.float32) * (1.0 / 32768.0), sr
