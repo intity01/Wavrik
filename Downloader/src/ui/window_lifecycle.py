@@ -10,14 +10,28 @@ class WindowLifecycleMixin:
         if getattr(self, "_cleaned_up", False):
             return
         self._cleaned_up = True
-        if hasattr(self, "pageWorkspace") and hasattr(self.pageWorkspace, "_cleanup"):
-            self.pageWorkspace._cleanup()
-        if hasattr(self, "pageLibrary") and hasattr(self.pageLibrary, "cleanup"):
-            self.pageLibrary.cleanup()
-        if hasattr(self, "pageAudioTools") and hasattr(self.pageAudioTools, "cleanup"):
-            self.pageAudioTools.cleanup()
-        if hasattr(self, "_tray"):
-            self._tray.stop()
+        try:
+            if hasattr(self, "pageWorkspace"):
+                fn = getattr(self.pageWorkspace, "_cleanup", None) or getattr(self.pageWorkspace, "cleanup", None)
+                if callable(fn):
+                    fn()
+        except Exception:
+            pass
+        try:
+            if hasattr(self, "pageLibrary") and hasattr(self.pageLibrary, "cleanup"):
+                self.pageLibrary.cleanup()
+        except Exception:
+            pass
+        try:
+            if hasattr(self, "pageAudioTools") and hasattr(self.pageAudioTools, "cleanup"):
+                self.pageAudioTools.cleanup()
+        except Exception:
+            pass
+        try:
+            if hasattr(self, "_tray") and hasattr(self._tray, "stop"):
+                self._tray.stop()
+        except Exception:
+            pass
 
     def closeEvent(self, event) -> None:
         if sys.platform == "darwin":

@@ -21,10 +21,19 @@ class StemSeparationWorker(QRunnable):
         self._output_dir = Path(output_dir) if output_dir else None
         self._mode = mode
         self._signals = signals
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        self._cancelled = True
 
     def run(self) -> None:
+        if self._cancelled:
+            return
         try:
             res = separate_stems(self._source, self._output_dir, self._mode)
+            if self._cancelled:
+                return
             self._signals.separated.emit(str(res.vocals_path), str(res.instrumental_path), res.mode_used)
         except Exception as exc:
-            self._signals.error.emit(f"Stem separation failed: {exc}")
+            if not self._cancelled:
+                self._signals.error.emit(f"Stem separation failed: {exc}")

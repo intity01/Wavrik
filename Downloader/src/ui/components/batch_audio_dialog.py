@@ -42,6 +42,7 @@ class BatchAudioDialog(QDialog):
         )
         self._signals = BatchAudioSignals()
         self._signals.itemProcessed.connect(self._on_item)
+        self._signals.error.connect(self._on_error)
         self._signals.finished.connect(self._on_finished)
         self._worker = BatchAudioWorker(self._sources, cfg, self._signals, self._cached_keys)
         self._pool.start(self._worker)
@@ -49,6 +50,9 @@ class BatchAudioDialog(QDialog):
     def _on_item(self, cur: int, total: int, name: str) -> None:
         self.pbar.setValue(cur)
         self.status.setText(f"Completed {cur}/{total}: {name}")
+
+    def _on_error(self, message: str) -> None:
+        self.status.setText(message)
 
     def _on_finished(self, succ: int, fail: int) -> None:
         self._worker = None
@@ -62,6 +66,7 @@ class BatchAudioDialog(QDialog):
         if self._signals:
             try:
                 self._signals.itemProcessed.disconnect()
+                self._signals.error.disconnect()
                 self._signals.finished.disconnect()
             except (TypeError, RuntimeError):
                 pass

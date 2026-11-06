@@ -8,16 +8,17 @@ from pathlib import Path
 from PyQt6.QtCore import QThreadPool, pyqtSignal
 from PyQt6.QtWidgets import QWidget
 
-from src.services.audio_analysis import transpose_key
-from src.services.audio_pitch import build_export_filename, unique_export_path
-from src.services.platform_actions import open_parent
+from src.services.audio_pitch import unique_export_path
 from src.ui.components.audio_transport import AudioTransportController
 from src.ui.components.batch_audio_dialog import BatchAudioDialog
 from src.ui.dialogs import get_open_file_path, get_open_files
 from src.ui.i18n import tr
 from src.ui.workers.audio_worker import AnalyzeAudioWorker, AudioToolSignals, PitchJob, RenderPitchWorker
 
-from .audio_tools_presenter import apply_analysis_result, start_stem_separation, update_preview_labels
+from .audio_tools_presenter import (
+    apply_analysis_result, build_export_name, compute_tempo_ratio,
+    open_export_folder, set_controls_enabled, start_stem_separation, update_preview_labels,
+)
 from .audio_tools_view import build_ui
 
 _AUDIO_FILTER = "Audio files (*.wav *.mp3 *.flac *.m4a *.aac *.ogg *.opus);;All files (*.*)"
@@ -53,11 +54,12 @@ class AudioToolsInterface(QWidget):
         self._set_controls_enabled(True) or self._update_preview_labels()
         self._on_analyzed(cached) if (cached and cached.get("key")) else self._reanalyze()
     def _choose_file(self) -> None:
-        if (sel := get_open_file_path(self, "Choose audio file", _AUDIO_FILTER, self._cfg.get("downloadPath", ""))):
-            self.loadFile(sel)
+        (sel := get_open_file_path(self, "Choose audio file", _AUDIO_FILTER, self._cfg.get("downloadPath", ""))) and self.loadFile(sel)
     def _open_batch_dialog(self) -> None:
         if (files := get_open_files(self, "Choose audio files for batch processing", _AUDIO_FILTER, self._cfg.get("downloadPath", ""))):
-            BatchAudioDialog(files, self._cfg, self, {str(self._source): self.detectedKeyCombo.currentText()} if self._source else {}).exec()
+            self._batchDialog = BatchAudioDialog(files, self._cfg, self, {str(self._source): self.detectedKeyCombo.currentText()} if self._source else {})
+            self._batchDialog.exec()
+            self._batchDialog = None
 
     def _reanalyze(self) -> None:
         if self._source and not self._busy:
@@ -65,7 +67,8 @@ class AudioToolsInterface(QWidget):
             self.statusLabel.setText("Analyzing Key, Waveform & BPM…")
             self._signals.analyzed.connect(self._on_analyzed)
             self._signals.error.connect(self._on_error)
-            self._pool.start(AnalyzeAudioWorker(self._source, self._signals))
+            self._activeWorker = AnalyzeAudioWorker(self._source, self._signals)
+            self._pool.start(self._activeWorker)
 
     def _on_analyzed(self, result: dict) -> None:
         self._busy = False
@@ -109,7 +112,8 @@ class AudioToolsInterface(QWidget):
         self._signals.rendered.connect(self._on_rendered)
         self._signals.error.connect(self._on_error)
         job = PitchJob(self._source, target, self.semitoneSpin.value(), str(self.engineCombo.currentData() or "r3_finer"), fmt, is_preview, self._tempo_ratio(), self.waveformWidget.seekPosition())
-        self._pool.start(RenderPitchWorker(job, self._signals))
+        self._activeWorker = RenderPitchWorker(job, self._signals)
+        self._pool.start(self._activeWorker)
 
     def _on_rendered(self, path_str: str, is_preview: bool) -> None:
         self._busy, out = False, Path(path_str)
@@ -130,16 +134,12 @@ class AudioToolsInterface(QWidget):
 
     def cleanup(self) -> None:
         self._busy = False
+        getattr(self, "_activeWorker", None) and hasattr(self._activeWorker, "cancel") and self._activeWorker.cancel()
+        getattr(self, "_batchDialog", None) and hasattr(self._batchDialog, "_cancel_and_wait") and self._batchDialog._cancel_and_wait()
         self._pool.clear()
         self._pool.waitForDone(2000)
 
-    def _open_export_folder(self) -> None:
-        open_parent(self._lastExport) if (self._lastExport and self._lastExport.exists()) else None
-    def _export_name(self, fmt: str) -> str:
-        tb = self.targetBpmSpin.value() if abs(self._tempo_ratio() - 1.0) >= 0.005 else 0.0
-        return build_export_filename(self._source, self.semitoneSpin.value(), transpose_key(self.detectedKeyCombo.currentText() or "C major", self.semitoneSpin.value()), fmt, tb)
-    def _tempo_ratio(self) -> float:
-        return max(0.5, min(2.0, self.targetBpmSpin.value() / max(30.0, self.bpmSpin.value())))
-    def _set_controls_enabled(self, enabled: bool) -> None:
-        for w in (self.reanalyzeBtn, self.separateStemsBtn, self.previewOrigBtn, self.previewShiftedBtn, self.stopAudioBtn, self.exportBtn, *self.candButtons, *self.camelotButtons):
-            w.setEnabled(enabled)
+    def _open_export_folder(self) -> None: open_export_folder(self)
+    def _export_name(self, fmt: str) -> str: return build_export_name(self, fmt)
+    def _tempo_ratio(self) -> float: return compute_tempo_ratio(self)
+    def _set_controls_enabled(self, enabled: bool) -> None: set_controls_enabled(self, enabled)

@@ -8,7 +8,9 @@ from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel
 
 from src.services.audio_analysis import camelot_code, enharmonic_key, mirex_key_score, transpose_key
 from src.services.audio_camelot import get_harmonic_neighbors
+from src.services.audio_pitch import build_export_filename
 from src.services.audio_stems import STEM_MODES
+from src.services.platform_actions import open_parent
 from src.ui.components.controls import ComboBox, PushButton, ToolButton
 from src.ui.theme.key_colors import apply_key_property
 from src.ui.workers.stem_worker import StemSeparationWorker, StemSignals
@@ -95,7 +97,8 @@ def start_stem_separation(page) -> None:
     page.separateStemsBtn.setEnabled(False)
     page._stemSignals.separated.connect(lambda v, i, m: on_stems_ready(page, v, i, m))
     page._stemSignals.error.connect(page._on_error)
-    page._pool.start(StemSeparationWorker(page._source, page._cfg.getDownloadPath("audio"), mode, page._stemSignals))
+    page._activeWorker = StemSeparationWorker(page._source, page._cfg.getDownloadPath("audio"), mode, page._stemSignals)
+    page._pool.start(page._activeWorker)
 
 
 def on_stems_ready(page, vocals_str: str, inst_str: str, mode_used: str) -> None:
@@ -113,3 +116,23 @@ def on_stems_ready(page, vocals_str: str, inst_str: str, mode_used: str) -> None
     page._lastExport = voc if voc.is_file() else inst
     page.openFolderBtn.show()
     page.statusLabel.setText(f"Stems ready ({mode_used}): {voc.name} + {inst.name}")
+
+
+def set_controls_enabled(page, enabled: bool) -> None:
+    for w in (page.reanalyzeBtn, page.separateStemsBtn, page.previewOrigBtn, page.previewShiftedBtn, page.stopAudioBtn, page.exportBtn, *page.candButtons, *page.camelotButtons):
+        w.setEnabled(enabled)
+
+
+def compute_tempo_ratio(page) -> float:
+    return max(0.5, min(2.0, page.targetBpmSpin.value() / max(30.0, page.bpmSpin.value())))
+
+
+def build_export_name(page, fmt: str) -> str:
+    tb = page.targetBpmSpin.value() if abs(compute_tempo_ratio(page) - 1.0) >= 0.005 else 0.0
+    key_str = transpose_key(page.detectedKeyCombo.currentText() or "C major", page.semitoneSpin.value())
+    return build_export_filename(page._source, page.semitoneSpin.value(), key_str, fmt, tb)
+
+
+def open_export_folder(page) -> None:
+    if page._lastExport and page._lastExport.exists():
+        open_parent(page._lastExport)

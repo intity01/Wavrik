@@ -30,8 +30,18 @@ _IGNORE_EXTS = frozenset({".part", ".ytdl", ".tmp", ".temp"})
 
 
 def _is_valid_output(path: Path) -> bool:
-    name = path.name.lower()
-    return path.is_file() and not any(name.endswith(ext) for ext in _IGNORE_EXTS)
+    try:
+        name = path.name.lower()
+        return path.is_file() and not any(name.endswith(ext) for ext in _IGNORE_EXTS)
+    except OSError:
+        return False
+
+
+def _safe_mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return -1.0
 
 
 def resolve_output(folder: Path, info: dict, preset: DownloadPreset, started: float) -> Path | None:
@@ -46,10 +56,17 @@ def resolve_output(folder: Path, info: dict, preset: DownloadPreset, started: fl
         if _is_valid_output(path):
             return path
     recent = [
-        path for path in folder.glob("*")
-        if _is_valid_output(path) and path.stat().st_mtime >= started - 2
+        (mtime, path) for path in folder.glob("*")
+        if _is_valid_output(path) and (mtime := _safe_mtime(path)) >= started - 2
     ]
-    return max(recent, key=lambda path: path.stat().st_mtime, default=None)
+    return max(recent, key=lambda item: item[0])[1] if recent else None
+
+
+def _is_safe_file(path: Path) -> bool:
+    try:
+        return path.is_file()
+    except OSError:
+        return False
 
 
 def resolve_thumbnail(folder: Path, started: float) -> Path | None:
@@ -57,7 +74,7 @@ def resolve_thumbnail(folder: Path, started: float) -> Path | None:
     if not thumbnail_dir.exists():
         return None
     recent = [
-        path for path in thumbnail_dir.glob("*")
-        if path.is_file() and path.stat().st_mtime >= started - 2
+        (mtime, path) for path in thumbnail_dir.glob("*")
+        if _is_safe_file(path) and (mtime := _safe_mtime(path)) >= started - 2
     ]
-    return max(recent, key=lambda path: path.stat().st_mtime, default=None)
+    return max(recent, key=lambda item: item[0])[1] if recent else None
