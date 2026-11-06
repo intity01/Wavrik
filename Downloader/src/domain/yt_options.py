@@ -17,6 +17,13 @@ from .yt_policy import (
 )
 
 
+def sanitize_rename_pattern(pattern: str) -> str:
+    cleaned = (pattern or "{title}").replace("..", "_").replace("/", "_").replace("\\", "_").replace(":", "_")
+    while ".." in cleaned:
+        cleaned = cleaned.replace("..", "_")
+    return cleaned.strip() or "{title}"
+
+
 @dataclass(frozen=True)
 class YtDownloadSettings:
     rename_pattern: str = "{title}"
@@ -30,12 +37,15 @@ class YtDownloadSettings:
     max_sleep_interval: int = 10
     rate_limit_protection: bool = True
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "rename_pattern", sanitize_rename_pattern(self.rename_pattern))
+
     @classmethod
     def from_config(cls, config) -> YtDownloadSettings:
         if not config:
             return cls()
         return cls(
-            rename_pattern=config.get("renamePattern", "{title}"),
+            rename_pattern=sanitize_rename_pattern(config.get("renamePattern", "{title}")),
             cookie_file=config.get("cookieFile", ""),
             download_thumbnail=config.get("downloadThumbnail", False),
             thumbnail_format=config.get("thumbnailFormat", "jpg"),
@@ -82,9 +92,10 @@ def _base_options(
     output_dir: Path, preset: DownloadPreset, hook: Callable,
     settings: YtDownloadSettings, postprocessor_hook: Callable | None = None,
 ) -> dict:
+    safe_pattern = sanitize_rename_pattern(settings.rename_pattern)
     options = {
         "format": format_selector(preset),
-        "outtmpl": str(output_dir / (template(settings.rename_pattern) + ".%(ext)s")),
+        "outtmpl": str(output_dir / (template(safe_pattern) + ".%(ext)s")),
         "progress_hooks": [hook], "quiet": True, "no_warnings": True,
         "continuedl": True, "noplaylist": True, "windowsfilenames": True,
         "socket_timeout": settings.socket_timeout, "retries": settings.retry_count,

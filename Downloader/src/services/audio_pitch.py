@@ -23,7 +23,7 @@ _FORMATS = {
 def build_export_filename(
     source: str | Path, semitones: int, target_key: str = "", fmt: str = "wav", target_bpm: float = 0.0,
 ) -> str:
-    stem = Path(source).stem or "track"
+    stem = Path(Path(source).name).stem or "track"
     ext = _FORMATS.get(fmt, _FORMATS["wav"])[0]
     sign = f"+{semitones}" if semitones > 0 else str(semitones)
     key_tag = _compact_key(target_key)
@@ -33,15 +33,24 @@ def build_export_filename(
 
 
 def unique_export_path(directory: Path, filename: str) -> Path:
+    safe_name = Path(filename).name
+    if not safe_name:
+        raise ValueError(f"Invalid export filename: {filename}")
+    resolved_dir = directory.resolve()
+    candidate = directory / safe_name
+    if not candidate.resolve().is_relative_to(resolved_dir):
+        raise ValueError(f"Path traversal detected: {filename}")
     directory.mkdir(parents=True, exist_ok=True)
-    candidate = directory / filename
     if not candidate.exists():
         return candidate
     stem, suffix = candidate.stem, candidate.suffix
     index = 1
     while (directory / f"{stem}_{index}{suffix}").exists():
         index += 1
-    return directory / f"{stem}_{index}{suffix}"
+    result = directory / f"{stem}_{index}{suffix}"
+    if not result.resolve().is_relative_to(resolved_dir):
+        raise ValueError(f"Path traversal detected: {filename}")
+    return result
 
 
 def render_pitch_shift(
@@ -138,6 +147,4 @@ def _run_cmd(cmd: list[str], cancel_check: Any = None) -> None:
 
 def _compact_key(key_name: str) -> str:
     parts = key_name.strip().split()
-    if len(parts) != 2:
-        return ""
-    return f"{parts[0]}m" if parts[1].lower() == "minor" else parts[0]
+    return (f"{parts[0]}m" if parts[1].lower() == "minor" else parts[0]) if len(parts) == 2 else ""
