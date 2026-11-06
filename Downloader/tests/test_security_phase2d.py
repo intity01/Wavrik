@@ -23,6 +23,7 @@ from src.domain.native_downloader import NativeDownloader
 from src.domain.native_file import (
     MAX_FILE_BYTES,
     NativeDownloadError,
+    _parse_content_length,
     _stream,
     download_file,
 )
@@ -31,6 +32,7 @@ from src.domain.presets import getPreset
 from src.domain.yt_options import (
     YtDownloadSettings,
     buildOptions,
+    metadataOptions,
     sanitize_rename_pattern,
 )
 from src.services.audio_pitch import (
@@ -152,6 +154,19 @@ def test_c2_build_export_filename_strips_directory_traversal():
     assert build_export_filename("/etc/shadow", -3, target_key="A minor", fmt="mp3") == "shadow_[Key_Am_-3st].mp3"
 
 
+def test_c2_build_export_filename_slash_chord_and_dots():
+    # Slash chord notation like C/E Major must sanitize slash to prevent filename corruption/traversal
+    result = build_export_filename("track.mp3", 2, target_key="C/E Major")
+    assert "/" not in result
+    assert "\\" not in result
+    assert result == "track_[Key_C_E_+2st].wav"
+    assert Path(result).name == result
+
+    # Dots-only source should fall back to track
+    assert build_export_filename("..", 2) == "track_[+2st].wav"
+    assert build_export_filename("...", 0) == "track_[0st].wav"
+
+
 def test_c2_unique_export_path_prevents_traversal(tmp_path):
     target = unique_export_path(tmp_path, "../../evil_export.wav")
     assert target.parent == tmp_path
@@ -164,6 +179,17 @@ def test_c2_unique_export_path_rejects_empty_or_pure_dots(tmp_path):
         unique_export_path(tmp_path, "..")
     with pytest.raises(ValueError, match="Invalid export filename"):
         unique_export_path(tmp_path, "")
+    with pytest.raises(ValueError, match="Invalid export filename"):
+        unique_export_path(tmp_path, "   ")
+    with pytest.raises(ValueError, match="Invalid export filename"):
+        unique_export_path(tmp_path, "...")
+
+
+def test_c2_unique_export_path_rejects_traversal_at_root_directory():
+    # When directory is a root or top-level drive, '..' must still be rejected
+    root_dir = Path("C:/") if Path("C:/").exists() else Path("/")
+    with pytest.raises(ValueError, match="(Invalid export filename|Path traversal detected)"):
+        unique_export_path(root_dir, "..")
 
 
 def test_c2_unique_export_path_handles_collision_safely(tmp_path):
@@ -245,6 +271,15 @@ def test_c3_download_file_cleans_temporary_part_on_size_overflow(tmp_path, monke
     assert len(leftovers) == 0
 
 
+def test_c3_parse_content_length_handles_invalid_and_negative():
+    assert _parse_content_length("1024") == 1024
+    assert _parse_content_length("0") == 0
+    assert _parse_content_length("-100") == 0
+    assert _parse_content_length("not_a_number") == 0
+    assert _parse_content_length("") == 0
+    assert _parse_content_length(None) == 0
+
+
 # ==============================================================================
 # [C6] Windows MAX_PATH and DOS Device Names
 # ==============================================================================
@@ -263,6 +298,8 @@ def test_c3_download_file_cleans_temporary_part_on_size_overflow(tmp_path, monke
         ("LPT1", "mkv"),
         ("lpt9", "aac"),
         ("CON.extra", "mp4"),
+        ("CONIN$", "txt"),
+        ("CONOUT$", "txt"),
     ],
 )
 def test_c6_target_path_prefixes_dos_device_names(tmp_path, dos_name, ext):
@@ -346,3 +383,44 @@ def test_c10_get_download_path_falls_back_on_unc(tmp_path):
     safe_path = cfg.getDownloadPath("video")
     assert str(DEFAULT_SETTINGS["downloadPath"]) in str(safe_path)
     assert not str(safe_path).startswith(("\\\\", "//"))
+
+
+def test_c10_config_rejects_unc_path_objects(tmp_path):
+    cfg = Config(app_data_dir=tmp_path)
+
+    # Path objects must also be detected as UNC and safely rejected
+    cfg.set("downloadPath", Path(r"\\smb-object.evil\share"))
+    assert cfg.get("downloadPath") == DEFAULT_SETTINGS["downloadPath"]
+
+    cfg.set("cookieFile", Path(r"//smb-object.evil/cookies.txt"))
+    assert cfg.get("cookieFile") == DEFAULT_SETTINGS["cookieFile"]
+
+    cfg.update(
+        downloadPath=Path(r"\\evil-update\loot"),
+        cookieFile=Path(r"//evil-update/cookies"),
+    )
+    assert cfg.get("downloadPath") == DEFAULT_SETTINGS["downloadPath"]
+    assert cfg.get("cookieFile") == DEFAULT_SETTINGS["cookieFile"]
+
+
+def test_c10_config_save_settings_with_safe_path_object(tmp_path):
+    cfg = Config(app_data_dir=tmp_path)
+    safe_folder = tmp_path / "my_downloads"
+    cfg.set("downloadPath", safe_folder)
+
+    # Must serialize to string and not raise TypeError for WindowsPath
+    assert isinstance(cfg.get("downloadPath"), str)
+    assert cfg.saveSettings()
+    assert (tmp_path / "settings.json").exists()
+
+
+def test_c10_yt_download_settings_and_metadata_guard_unc_cookies():
+    # YtDownloadSettings should neutralize UNC cookie paths
+    settings = YtDownloadSettings(cookie_file=r"\\evil-host\cookies.txt")
+    assert settings.cookie_file == ""
+
+    # metadataOptions should never add UNC cookie files to options dict
+    opts = metadataOptions(cookie_file=r"\\evil-host\cookies.txt")
+    assert "cookiefile" not in opts
+    opts_slash = metadataOptions(cookie_file="//evil-host/cookies.txt")
+    assert "cookiefile" not in opts_slash

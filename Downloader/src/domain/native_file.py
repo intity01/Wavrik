@@ -23,7 +23,7 @@ def download_file(cancel, request_get, url: str, output_dir: Path, preset: Downl
             _validate_response(response)
             target = target_path(output_dir, url, response.headers.get("content-disposition", ""), preset.container)
             temporary = target.with_suffix(target.suffix + ".part")
-            total = int(response.headers.get("content-length") or 0)
+            total = _parse_content_length(response.headers.get("content-length"))
             _report(progress, "downloading", 0.0, "—", "—")
             _stream(cancel, response, temporary, total, progress)
             temporary.replace(target)
@@ -50,6 +50,13 @@ def _validate_response(response) -> None:
 
 def _safe_error(exc: Exception) -> str:
     return str(exc) if isinstance(exc, NativeDownloadError) else friendly_error(str(exc))
+
+
+def _parse_content_length(val: str | None) -> int:
+    try:
+        return max(0, int(val or 0))
+    except (ValueError, TypeError):
+        return 0
 
 
 MAX_FILE_BYTES = 10 * 1024 * 1024 * 1024  # 10 GB limit for native downloads

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import math
 import os
-from pathlib import Path
 import shutil
 import sys
 import tempfile
+from pathlib import Path
 from typing import Any
 
 from src.core.process import is_cancellation_requested, run_cancellable_process
@@ -23,18 +23,19 @@ _FORMATS = {
 def build_export_filename(
     source: str | Path, semitones: int, target_key: str = "", fmt: str = "wav", target_bpm: float = 0.0,
 ) -> str:
-    stem = Path(Path(source).name).stem or "track"
+    clean_src = Path(source).name.strip(". ")
+    stem = Path(clean_src).stem.strip(". ") if clean_src else "track"
     ext = _FORMATS.get(fmt, _FORMATS["wav"])[0]
     sign = f"+{semitones}" if semitones > 0 else str(semitones)
     key_tag = _compact_key(target_key)
     bpm_tag = f"_{int(round(target_bpm))}BPM" if target_bpm > 0.0 else ""
     suffix = f"_[Key_{key_tag}{bpm_tag}_{sign}st]" if key_tag else f"_[{sign}st]"
-    return f"{stem}{suffix}{ext}"
+    return Path(f"{stem or 'track'}{suffix}{ext}").name
 
 
 def unique_export_path(directory: Path, filename: str) -> Path:
     safe_name = Path(filename).name
-    if not safe_name:
+    if not safe_name or safe_name in {".", ".."} or not safe_name.strip(". "):
         raise ValueError(f"Invalid export filename: {filename}")
     resolved_dir = directory.resolve()
     candidate = directory / safe_name
@@ -45,25 +46,22 @@ def unique_export_path(directory: Path, filename: str) -> Path:
         return candidate
     stem, suffix = candidate.stem, candidate.suffix
     index = 1
-    while (directory / f"{stem}_{index}{suffix}").exists():
+    while (candidate := directory / f"{stem}_{index}{suffix}").exists():
         index += 1
-    result = directory / f"{stem}_{index}{suffix}"
-    if not result.resolve().is_relative_to(resolved_dir):
+    if not candidate.resolve().is_relative_to(resolved_dir):
         raise ValueError(f"Path traversal detected: {filename}")
-    return result
+    return candidate
 
 
 def render_pitch_shift(
-    source: str | Path, target: str | Path, semitones: int,
-    engine: str = "r3_finer", fmt: str = "wav", tempo_ratio: float = 1.0,
+    source: str | Path, target: str | Path, semitones: int, engine: str = "r3_finer", fmt: str = "wav", tempo_ratio: float = 1.0,
 ) -> Path:
     return render_audio_clip(source, target, semitones, (engine, fmt, tempo_ratio, 0.0))
 
 
 def render_audio_clip(
     source: str | Path, target: str | Path, semitones: int,
-    options: tuple = ("r3_finer", "wav", 1.0, 0.0, 0.0),
-    cancel_check: Any = None,
+    options: tuple = ("r3_finer", "wav", 1.0, 0.0, 0.0), cancel_check: Any = None,
 ) -> Path:
     engine, fmt, tempo_ratio, max_dur = options[:4]
     start_sec = float(options[4]) if len(options) > 4 else 0.0
@@ -106,26 +104,25 @@ def _validate_paths(
 def _require_ffmpeg() -> str:
     folder = find_ffmpeg()
     exe = "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg"
-    found = str(Path(folder) / exe) if (folder and (Path(folder) / exe).is_file()) else shutil.which("ffmpeg")
-    if not found:
-        raise RuntimeError("FFmpeg executable is required for audio rendering.")
-    return found
+    if found := (str(Path(folder) / exe) if (folder and (Path(folder) / exe).is_file()) else shutil.which("ffmpeg")):
+        return found
+    raise RuntimeError("FFmpeg executable is required for audio rendering.")
 
 
 def _encode_direct(ffmpeg_exe: str, src: Path, dst: Path, opts: tuple, cancel_check: Any = None) -> None:
     _, fmt, _, max_dur, start_sec, _ = opts
     codec = _FORMATS.get(fmt, _FORMATS["wav"])[1]
-    seek, limit = (["-ss", f"{start_sec:.2f}"] if start_sec > 0 else []), (["-t", f"{max_dur:.1f}"] if max_dur > 0 else [])
-    _run_cmd([ffmpeg_exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", *seek, "-i", str(src), *limit, "-vn", *codec, str(dst)], cancel_check)
+    seek, lim = (["-ss", f"{start_sec:.2f}"] if start_sec > 0 else []), (["-t", f"{max_dur:.1f}"] if max_dur > 0 else [])
+    _run_cmd([ffmpeg_exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", *seek, "-i", str(src), *lim, "-vn", *codec, str(dst)], cancel_check)
 
 
 def _render_with_r3(ffmpeg_exe: str, rb_exe: str, src: Path, dst: Path, opts: tuple, cancel_check: Any = None) -> None:
     semitones, fmt, tempo_ratio, max_dur, start_sec, engine = opts
     quiet, shifted, codec = dst.parent / "headroom_in.wav", dst.parent / "r3_shifted.wav", _FORMATS.get(fmt, _FORMATS["wav"])[1]
-    seek, limit = (["-ss", f"{start_sec:.2f}"] if start_sec > 0 else []), (["-t", f"{max_dur:.1f}"] if max_dur > 0 else [])
+    seek, lim = (["-ss", f"{start_sec:.2f}"] if start_sec > 0 else []), (["-t", f"{max_dur:.1f}"] if max_dur > 0 else [])
     dur_ratio = f"{1.0 / max(0.5, min(2.0, tempo_ratio)):.6f}"
     r3_flags = ["-3", "--pitch-hq"] if engine == "r3_percussive" else ["-3", "-F", "--centre-focus"]
-    _run_cmd([ffmpeg_exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", *seek, "-i", str(src), *limit, "-vn", "-af", "volume=0.5", "-c:a", "pcm_f32le", str(quiet)], cancel_check)
+    _run_cmd([ffmpeg_exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", *seek, "-i", str(src), *lim, "-vn", "-af", "volume=0.5", "-c:a", "pcm_f32le", str(quiet)], cancel_check)
     _run_cmd([rb_exe, *r3_flags, "-t", dur_ratio, "-p", str(semitones), str(quiet), str(shifted)], cancel_check)
     _run_cmd([ffmpeg_exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(shifted), "-vn", "-af", "volume=2.0,alimiter=limit=0.95:level=disabled", *codec, str(dst)], cancel_check)
 
@@ -133,9 +130,9 @@ def _render_with_r3(ffmpeg_exe: str, rb_exe: str, src: Path, dst: Path, opts: tu
 def _render_with_ffmpeg(ffmpeg_exe: str, src: Path, dst: Path, opts: tuple, cancel_check: Any = None) -> None:
     semitones, fmt, tempo_ratio, max_dur, start_sec, _ = opts
     ratio, codec = 2.0 ** (semitones / 12.0), _FORMATS.get(fmt, _FORMATS["wav"])[1]
-    seek, limit = (["-ss", f"{start_sec:.2f}"] if start_sec > 0 else []), (["-t", f"{max_dur:.1f}"] if max_dur > 0 else [])
+    seek, lim = (["-ss", f"{start_sec:.2f}"] if start_sec > 0 else []), (["-t", f"{max_dur:.1f}"] if max_dur > 0 else [])
     filt = f"rubberband=tempo={tempo_ratio:.6f}:pitch={ratio:.8f}:pitchq=quality:channels=together:formant=preserved"
-    _run_cmd([ffmpeg_exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", *seek, "-i", str(src), *limit, "-vn", "-af", filt, *codec, str(dst)], cancel_check)
+    _run_cmd([ffmpeg_exe, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", *seek, "-i", str(src), *lim, "-vn", "-af", filt, *codec, str(dst)], cancel_check)
 
 
 def _run_cmd(cmd: list[str], cancel_check: Any = None) -> None:
@@ -146,5 +143,5 @@ def _run_cmd(cmd: list[str], cancel_check: Any = None) -> None:
 
 
 def _compact_key(key_name: str) -> str:
-    parts = key_name.strip().split()
+    parts = key_name.strip().replace("/", "_").replace("\\", "_").split()
     return (f"{parts[0]}m" if parts[1].lower() == "minor" else parts[0]) if len(parts) == 2 else ""

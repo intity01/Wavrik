@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from src.core.runtime import find_deno, find_ffmpeg
 
@@ -21,7 +22,11 @@ def sanitize_rename_pattern(pattern: str) -> str:
     cleaned = (pattern or "{title}").replace("..", "_").replace("/", "_").replace("\\", "_").replace(":", "_")
     while ".." in cleaned:
         cleaned = cleaned.replace("..", "_")
-    return cleaned.strip() or "{title}"
+    return cleaned.strip(". ") or "{title}"
+
+
+def _is_unc(path: Any) -> bool:
+    return bool(path) and str(path).strip().startswith(("\\\\", "//"))
 
 
 @dataclass(frozen=True)
@@ -39,14 +44,17 @@ class YtDownloadSettings:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "rename_pattern", sanitize_rename_pattern(self.rename_pattern))
+        if _is_unc(self.cookie_file):
+            object.__setattr__(self, "cookie_file", "")
 
     @classmethod
     def from_config(cls, config) -> YtDownloadSettings:
         if not config:
             return cls()
+        raw_cookie = config.get("cookieFile", "")
         return cls(
             rename_pattern=sanitize_rename_pattern(config.get("renamePattern", "{title}")),
-            cookie_file=config.get("cookieFile", ""),
+            cookie_file="" if _is_unc(raw_cookie) else str(raw_cookie),
             download_thumbnail=config.get("downloadThumbnail", False),
             thumbnail_format=config.get("thumbnailFormat", "jpg"),
             thumbnail_quality=config.get("thumbnailQuality", "original"),
@@ -83,7 +91,7 @@ def metadataOptions(
         "socket_timeout": socket_timeout,
     }
     _apply_js_runtime(options)
-    if cookie_file and Path(cookie_file).is_file():
+    if cookie_file and not _is_unc(cookie_file) and Path(cookie_file).is_file():
         options["cookiefile"] = cookie_file
     return options
 
@@ -115,7 +123,7 @@ def _apply_runtime_options(options: dict, settings: YtDownloadSettings) -> None:
     ffmpeg_dir = find_ffmpeg()
     if ffmpeg_dir:
         options["ffmpeg_location"] = ffmpeg_dir
-    if settings.cookie_file and Path(settings.cookie_file).is_file():
+    if settings.cookie_file and not _is_unc(settings.cookie_file) and Path(settings.cookie_file).is_file():
         options["cookiefile"] = settings.cookie_file
 
 

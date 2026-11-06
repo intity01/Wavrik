@@ -10,7 +10,7 @@ from urllib.parse import unquote, urlsplit
 MAX_STEM_LENGTH = 150
 
 _DOS_NAMES = frozenset(
-    {"CON", "PRN", "AUX", "NUL"}
+    {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
     | {f"COM{i}" for i in range(10)}
     | {f"LPT{i}" for i in range(10)}
 )
