@@ -39,6 +39,9 @@ class AnalyzeAudioWorker(QRunnable):
     def cancel(self) -> None:
         self._cancelled = True
 
+    def is_cancelled(self) -> bool:
+        return self._cancelled
+
     def run(self) -> None:
         if self._cancelled:
             return
@@ -63,6 +66,9 @@ class RenderPitchWorker(QRunnable):
     def cancel(self) -> None:
         self._cancelled = True
 
+    def is_cancelled(self) -> bool:
+        return self._cancelled
+
     def run(self) -> None:
         if self._cancelled:
             return
@@ -70,7 +76,10 @@ class RenderPitchWorker(QRunnable):
             max_dur = 25.0 if self._job.is_preview else 0.0
             start = self._job.start_sec if self._job.is_preview else 0.0
             opts = (self._job.engine, self._job.fmt, self._job.tempo_ratio, max_dur, start)
-            out = render_audio_clip(self._job.source, self._job.target, self._job.semitones, opts)
+            out = render_audio_clip(
+                self._job.source, self._job.target, self._job.semitones, opts,
+                cancel_check=lambda: self._cancelled,
+            )
             if self._cancelled:
                 return
             self._signals.rendered.emit(str(out), self._job.is_preview)

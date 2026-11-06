@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import threading
 from datetime import UTC, datetime
 from typing import Any
@@ -27,13 +28,8 @@ class HistoryManager:
 
     def _load_history(self) -> list[dict[str, Any]]:
         payload = self._store.read({"schemaVersion": self.SCHEMA_VERSION, "entries": []})
-        if isinstance(payload, list):
-            entries = payload
-        elif isinstance(payload, dict) and self._supported_schema(payload.get("schemaVersion", 1)):
-            entries = payload.get("entries", [])
-        else:
-            self._store.backup()
-            return []
+        valid = isinstance(payload, dict) and self._supported_schema(payload.get("schemaVersion", 1))
+        entries = payload.get("entries", []) if valid else (payload if isinstance(payload, list) else None)
         if not isinstance(entries, list):
             self._store.backup()
             return []
@@ -84,6 +80,17 @@ class HistoryManager:
             if changed:
                 self._save()
 
+    def getCachedAnalysis(self, file_path: str | Path) -> dict[str, Any] | None:
+        target_norm = os.path.normcase(os.path.abspath(str(file_path)))
+        with self._lock:
+            for e in self.history:
+                raw_path = e.get("filePath")
+                if raw_path and os.path.normcase(os.path.abspath(raw_path)) == target_norm:
+                    analysis = e.get("analysis")
+                    if isinstance(analysis, dict) and analysis.get("key"):
+                        return dict(analysis)
+        return None
+
     def getHistory(self, limit: int = 100) -> list[dict[str, Any]]:
         with self._lock:
             return [dict(entry) for entry in self.history[:limit]]
@@ -103,14 +110,11 @@ class HistoryManager:
             self.logger.info("History cleared")
 
     def getStats(self) -> dict[str, float | int]:
-        entries = self.getHistory(1000)
+        e = self.getHistory(1000)
         return {
-            "totalDownloads": len(entries),
-            "successful": sum(e.get("status") == "completed" for e in entries),
-            "failed": sum(e.get("status") == "failed" for e in entries),
-            "audios": sum(e.get("mediaType") == "audio" for e in entries),
-            "videos": sum(e.get("mediaType") == "video" for e in entries),
-            "totalSizeMb": sum(int(e.get("fileSize", 0)) for e in entries) / 1048576,
+            "totalDownloads": len(e), "successful": sum(x.get("status") == "completed" for x in e),
+            "failed": sum(x.get("status") == "failed" for x in e), "audios": sum(x.get("mediaType") == "audio" for x in e),
+            "videos": sum(x.get("mediaType") == "video" for x in e), "totalSizeMb": sum(int(x.get("fileSize", 0)) for x in e) / 1048576,
         }
 
     def getStatistics(self) -> dict[str, int]:
