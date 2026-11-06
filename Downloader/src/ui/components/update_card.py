@@ -34,6 +34,9 @@ class UpdateCard(QFrame):
         self.setObjectName("SettingsCard")
         update_card_view.build(self)
 
+    def setLanguage(self, lang: str) -> None:
+        update_card_view.set_language(self, lang)
+
     def check(self, silent: bool = False) -> None:
         if self._busy:
             return

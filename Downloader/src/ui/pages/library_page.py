@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from PyQt6.QtCore import QThreadPool, QTimer, pyqtSignal
@@ -14,7 +13,8 @@ from src.ui.dialogs import get_open_file_path
 from src.ui.i18n import tr
 from src.ui.workers.audio_worker import AnalyzeAudioWorker, AudioToolSignals
 
-from .library_view import AUDIO_EXTS, build_library_ui, empty_message, matches_entry, record_local_file, summary_text
+from . import library_view
+from .library_view import AUDIO_EXTS, build_library_ui, empty_message, find_cached_analysis, matches_entry, record_local_file, summary_text
 
 _MEDIA_FILTER = "Media files (*.mp3 *.wav *.flac *.m4a *.aac *.ogg *.opus *.mp4 *.mkv *.webm);;All files (*.*)"
 
@@ -25,7 +25,7 @@ class LibraryInterface(QWidget):
 
     def __init__(self, historyManager, config=None, parent=None):
         super().__init__(parent)
-        self._hist, self._cfg = historyManager, config
+        self._hist, self._cfg, self._lang = historyManager, config, "en"
         self._limit, self._analysisCache, self._cardsByPath, self._bgSignals = 50, {}, {}, []
         self._activeWorkers: list[AnalyzeAudioWorker] = []
         self._analysisPool, self._debounce = QThreadPool(self), QTimer(self, singleShot=True, interval=250)
@@ -35,13 +35,13 @@ class LibraryInterface(QWidget):
         self.refresh()
 
     def setLanguage(self, lang: str) -> None:
-        self.titleLabel.setText(tr("lib.title", lang))
-        self.subtitleLabel.setText(tr("lib.subtitle", lang))
-        self.searchBar.setPlaceholderText(tr("lib.search_placeholder", lang))
-        self.colTrack.setText(tr("lib.col_track", lang))
-        self.colHarmony.setText(tr("lib.col_harmony", lang))
-        self.colStatus.setText(tr("lib.col_status", lang))
-        self.colActions.setText(tr("lib.col_actions", lang))
+        self._lang = lang
+        library_view.set_language(self, lang)
+        entries, stats = self._filtered_entries(), self._hist.getStats()
+        self.summary.setText(summary_text(stats, lang))
+        self.emptyLabel.setText(empty_message(entries, stats, lang))
+        for card in self._cardsByPath.values():
+            card.setLanguage(lang)
 
     def _apply_search(self) -> None:
         self._limit = 50
@@ -73,39 +73,31 @@ class LibraryInterface(QWidget):
         worker in self._activeWorkers and self._activeWorkers.remove(worker)
 
     def storeAnalysisResult(self, result: dict) -> None:
-        if (fp := str(result.get("filePath") or "")):
-            while len(self._analysisCache) >= 500:
-                self._analysisCache.pop(next(iter(self._analysisCache)), None)
-            self._analysisCache[fp] = result
-            if hasattr(self._hist, "updateAnalysis"):
-                self._hist.updateAnalysis(fp, result)
-            if fp in self._cardsByPath:
-                self._cardsByPath[fp].setAnalysisResult(result)
+        if not (fp := str(result.get("filePath") or "")):
+            return
+        self._analysisCache.pop(fp, None)
+        while len(self._analysisCache) >= 200:
+            self._analysisCache.pop(next(iter(self._analysisCache)), None)
+        self._analysisCache[fp] = result
+        getattr(self._hist, "updateAnalysis", lambda *_: None)(fp, result)
+        fp in self._cardsByPath and self._cardsByPath[fp].setAnalysisResult(result)
 
     def cleanup(self) -> None:
         for worker in list(self._activeWorkers):
-            if hasattr(worker, "cancel"):
-                worker.cancel()
+            getattr(worker, "cancel", lambda: None)()
         self._analysisPool.clear()
         self._analysisPool.waitForDone(2000)
         self._bgSignals.clear()
         self._activeWorkers.clear()
 
     def getCachedAnalysis(self, file_path: str) -> dict | None:
-        key = str(Path(file_path))
-        if key in self._analysisCache:
-            return self._analysisCache[key]
-        target_norm = os.path.normcase(os.path.abspath(file_path))
-        for k, v in self._analysisCache.items():
-            if os.path.normcase(os.path.abspath(k)) == target_norm:
-                return v
-        return None
+        return find_cached_analysis(self._analysisCache, file_path)
 
     def refresh(self, *_args) -> None:
-        for e in self._hist.getHistory(500):
+        for e in self._hist.getHistory(200):
             if (fp := str(e.get("filePath") or "")) and isinstance(e.get("analysis"), dict) and e["analysis"].get("key"):
                 self._analysisCache.setdefault(fp, e["analysis"])
-        while len(self._analysisCache) > 500:
+        while len(self._analysisCache) > 200:
             self._analysisCache.pop(next(iter(self._analysisCache)), None)
         entries, stats = self._filtered_entries(), self._hist.getStats()
         visible = entries[:self._limit]
@@ -113,13 +105,14 @@ class LibraryInterface(QWidget):
         for entry in visible:
             fp = str(entry.get("filePath") or "")
             card = LibraryCard(entry, self._analysisCache.get(fp))
+            card.setLanguage(self._lang)
             card.redownloadRequested.connect(self.redownloadRequested.emit)
             card.openInAudioToolsRequested.connect(self.openInAudioToolsRequested.emit)
             if fp:
                 self._cardsByPath[fp] = card
             self.listLay.insertWidget(self.listLay.count() - 1, card)
-        self.summary.setText(summary_text(stats))
-        self.emptyLabel.setText(empty_message(entries, stats))
+        self.summary.setText(summary_text(stats, self._lang))
+        self.emptyLabel.setText(empty_message(entries, stats, self._lang))
         self.emptyLabel.setVisible(not entries)
         self.tableHeader.setVisible(bool(entries))
         self.scrollArea.setVisible(bool(entries))
@@ -137,5 +130,6 @@ class LibraryInterface(QWidget):
             (w := self.listLay.takeAt(0).widget()) and w.deleteLater()
 
     def _clear(self) -> None:
-        if MessageBox("Clear library", "This removes library records only. Media files on disk will not be deleted.", self, "Clear library").exec():
+        t, m, b = tr("lib.clear_confirm_title", self._lang), tr("lib.clear_confirm_msg", self._lang), tr("lib.btn_clear", self._lang)
+        if MessageBox(t, m, self, b).exec():
             self._hist.clearHistory() or self._apply_search()

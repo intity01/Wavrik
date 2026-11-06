@@ -12,7 +12,6 @@ from src.services.audio_pitch import unique_export_path
 from src.ui.components.audio_transport import AudioTransportController
 from src.ui.components.batch_audio_dialog import BatchAudioDialog
 from src.ui.dialogs import get_open_file_path, get_open_files
-from src.ui.i18n import tr
 from src.ui.workers.audio_worker import AnalyzeAudioWorker, AudioToolSignals, PitchJob, RenderPitchWorker
 
 from .audio_tools_presenter import (
@@ -43,8 +42,8 @@ class AudioToolsInterface(QWidget):
         files = [Path(u.toLocalFile()) for u in event.mimeData().urls() if u.isLocalFile() and Path(u.toLocalFile()).is_file()]
         files and self.loadFile(files[0])
     def setLanguage(self, lang: str) -> None:
-        self.titleLabel.setText(tr("at.title", lang)) or self.subtitleLabel.setText(tr("at.subtitle", lang))
-        not self._source and self.fileLabel.setText(tr("at.no_file", lang))
+        from .audio_tools_i18n import set_language
+        set_language(self, lang)
     def loadFile(self, path: str | Path, cached: dict | None = None) -> None:
         if not (cand := Path(path)).is_file():
             return self.statusLabel.setText("Selected audio file does not exist.")

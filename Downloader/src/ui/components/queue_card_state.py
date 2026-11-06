@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
+from src.ui.i18n import tr
+
 ACTIVE_STATES = {"queued", "downloading", "processing"}
 
 
-def action_text(state: str) -> str:
+def action_text(state: str, lang: str = "en") -> str:
     if state in ACTIVE_STATES:
-        return "Cancel"
+        return tr("queue.action_cancel", lang)
     if state == "completed":
-        return "Open folder"
+        return tr("queue.action_open_folder", lang)
     if state in {"failed", "cancelled"}:
-        return "Retry"
-    return "Download"
+        return tr("queue.action_retry", lang)
+    return tr("queue.action_download", lang)
 
 
 def action_description(state: str) -> str:

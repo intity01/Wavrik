@@ -94,7 +94,7 @@ def _draw_background(painter: QPainter, w: int, h: int, tokens: dict) -> None:
 
 def _draw_empty_state(painter: QPainter, w: int, h: int, tokens: dict) -> None:
     painter.setPen(QColor(tokens["text_subtle"]))
-    painter.setFont(QFont("Segoe UI", 8))
+    painter.setFont(QFont("Segoe UI", 9))
     painter.drawText(0, 0, w, h, Qt.AlignmentFlag.AlignCenter, "Waveform preview loads on analysis (Click to seek)")
 
 
@@ -115,7 +115,7 @@ def _draw_midpoint(painter: QPainter, w: int, h: int, info: tuple) -> None:
     mid = w // 2
     painter.setPen(QPen(QColor(tokens["text_subtle"]), 1, Qt.PenStyle.DashLine))
     painter.drawLine(mid, 4, mid, h - 4)
-    font = QFont("Segoe UI", 7, QFont.Weight.Bold)
+    font = QFont("Segoe UI", 9, QFont.Weight.Bold)
     painter.setFont(font)
     painter.setPen(QColor(tokens["text_muted"]))
     elided = QFontMetrics(font).elidedText(label or "1st Half | 2nd Half", Qt.TextElideMode.ElideRight, max(40, (w - mid) - 10))
@@ -130,14 +130,14 @@ def _draw_playhead(painter: QPainter, w: int, h: int, timing: tuple, tokens: dic
     painter.setPen(QPen(QColor(tokens["text"]), 2))
     painter.drawLine(px, 2, px, h - 2)
     mins, secs = int(seek_sec // 60), int(seek_sec % 60)
-    painter.setFont(QFont("Consolas", 7, QFont.Weight.Bold))
+    painter.setFont(QFont("Consolas", 9, QFont.Weight.Bold))
     painter.drawText(min(w - 52, max(10, px + 4)), 13, f"@{mins}:{secs:02d}")
 
 
 def _draw_time_markers(painter: QPainter, w: int, h: int, duration: float, tokens: dict) -> None:
     if duration <= 0:
         return
-    painter.setFont(QFont("Consolas", 7))
+    painter.setFont(QFont("Consolas", 9))
     painter.setPen(QColor(tokens["text_muted"]))
     painter.drawText(8, h - 5, "0:00")
     mins, secs = int(duration // 60), int(duration % 60)

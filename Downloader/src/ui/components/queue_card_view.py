@@ -5,7 +5,7 @@ from __future__ import annotations
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
-from .controls import ElidedLabel, PrimaryPushButton, ProgressBar, ToolButton
+from .controls import ElidedLabel, ProgressBar, PushButton, ToolButton
 
 
 def build(card) -> None:
@@ -76,7 +76,7 @@ def _status_column(card) -> QVBoxLayout:
 def _action_column(card) -> QHBoxLayout:
     row = QHBoxLayout()
     row.setSpacing(6)
-    card._btnDl = PrimaryPushButton("Download")
+    card._btnDl = PushButton("Download")
     card._btnDl.setAccessibleName("Download this item")
     card._btnDl.clicked.connect(card._handle_action)
     card._btnDel = ToolButton("Remove")

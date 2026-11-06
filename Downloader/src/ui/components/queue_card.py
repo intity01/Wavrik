@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtWidgets import QWidget
 
 from src.domain.presets import getPreset
 from src.services.platform_actions import open_parent
+from src.ui.i18n import tr
 
 from . import queue_card_view
 from .queue_card_state import (
@@ -28,10 +27,8 @@ class QueueItemCard(QWidget):
 
     def __init__(self, url: str, config=None, preset_key: str | None = None, engine: str | None = None):
         super().__init__()
-        self._url = url
-        self._videoTitle = "Reading media information"
-        self._state = ""
-        self._file_path: Path | None = None
+        self._url, self._state, self._lang = url, "", "en"
+        self._videoTitle, self._file_path = "Reading media information", None
         default = preset_key or (config.get("defaultPreset") if config else None)
         self._presetKey = getPreset(default).key
         self._engine = engine or (config.get("downloadEngine", "auto") if config else "auto")
@@ -40,20 +37,21 @@ class QueueItemCard(QWidget):
         self.setEngine(self._engine)
         self.setStatus("fetching", "Reading media information")
 
-    def getVideoTitle(self) -> str:
-        return self._videoTitle
+    def getVideoTitle(self) -> str: return self._videoTitle
+    def selectedPreset(self): return getPreset(self._presetKey)
+    def selectedEngine(self) -> str: return self._engine
 
-    def selectedPreset(self):
-        return getPreset(self._presetKey)
-
-    def selectedEngine(self) -> str:
-        return self._engine
+    def setLanguage(self, lang: str) -> None:
+        self._lang = lang
+        self._btnDl.setText(action_text(self._state, lang))
+        self._btnDel.setText(tr("queue.action_remove", lang))
+        self._engineLabel.setText(tr("queue.engine_label", lang).replace("{engine}", engine_label(self._engine)))
 
     def setEngine(self, engine: str) -> None:
         if self._state in ACTIVE_STATES or self._state == "completed":
             return
         self._engine = engine if engine in {"auto", "native", "yt-dlp"} else "auto"
-        self._engineLabel.setText(f"Engine: {engine_label(self._engine)}")
+        self._engineLabel.setText(tr("queue.engine_label", self._lang).replace("{engine}", engine_label(self._engine)))
 
     def setPreset(self, key: str) -> None:
         if self._state in ACTIVE_STATES or self._state == "completed":
@@ -111,7 +109,7 @@ class QueueItemCard(QWidget):
         if changed:
             self._lblStatus.style().unpolish(self._lblStatus)
             self._lblStatus.style().polish(self._lblStatus)
-        self._btnDl.setText(action_text(state))
+        self._btnDl.setText(action_text(state, self._lang))
         self._btnDl.setEnabled(state != "fetching")
         self._btnDl.setAccessibleDescription(action_description(state))
         self._progress.setVisible(state in ACTIVE_STATES or state == "completed")

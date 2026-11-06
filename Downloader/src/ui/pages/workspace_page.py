@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import QWidget
 
 from src.core.parser import normalizeUrl
 from src.ui.components.queue_card import QueueItemCard
+from src.ui.i18n import tr
 
 from . import workspace_jobs, workspace_view
 from .workspace_interactions import WorkspaceInteractionMixin
@@ -21,6 +22,7 @@ class WorkspaceInterface(WorkspaceInteractionMixin, QWidget):
         self._dl = downloader
         self._hist = historyManager
         self._cfg = config
+        self._lang = "en"
         self._cards: dict[str, QueueItemCard] = {}
         self._metaWorkers: dict[str, object] = {}
         self._downloadWorkers: dict[str, object] = {}
@@ -34,6 +36,7 @@ class WorkspaceInterface(WorkspaceInteractionMixin, QWidget):
         self.destroyed.connect(self._cleanup)
 
     def setLanguage(self, lang: str) -> None:
+        self._lang = lang
         workspace_view.set_language(self, lang)
 
     def setMaxConcurrency(self, count: int) -> None:
@@ -42,12 +45,13 @@ class WorkspaceInterface(WorkspaceInteractionMixin, QWidget):
     def addUrl(self, raw_url: str) -> None:
         url = normalizeUrl(raw_url)
         if not url:
-            self.inputBar.showError("Enter a valid public http or https URL.")
+            self.inputBar.showError(tr("input.err_invalid_url", self._lang))
             return
         if url in self._cards:
-            self.inputBar.showError("This URL is already in the queue.")
+            self.inputBar.showError(tr("input.err_duplicate_url", self._lang))
             return
         card = QueueItemCard(url, self._cfg, self.downloadOptions.currentPresetKey(), self.downloadOptions.currentEngine())
+        card.setLanguage(self._lang)
         card.removeRequested.connect(self._removeCard)
         card.downloadRequested.connect(self._startDownload)
         card.cancelRequested.connect(self._cancelDownload)

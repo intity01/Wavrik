@@ -18,6 +18,7 @@ class InputBar(QFrame):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._lang = "en"
         self.setObjectName("InputPanel")
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 8, 10, 8)
@@ -26,6 +27,9 @@ class InputBar(QFrame):
         self.errorLabel = QLabel(objectName="InlineError")
         self.errorLabel.hide()
         root.addWidget(self.errorLabel)
+        self.setTabOrder(self.urlInput, self.pasteButton)
+        self.setTabOrder(self.pasteButton, self.importButton)
+        self.setTabOrder(self.importButton, self.addButton)
 
     def _primary_row(self) -> QHBoxLayout:
         row = QHBoxLayout()
@@ -52,7 +56,11 @@ class InputBar(QFrame):
         return row
 
     def setLanguage(self, lang: str) -> None:
+        self._lang = lang
         self.urlInput.setPlaceholderText(tr("dl.url_placeholder", lang))
+        self.pasteButton.setText(tr("input.paste", lang))
+        self.importButton.setText(tr("input.import", lang))
+        self.addButton.setText(tr("input.add", lang))
 
     def _paste(self) -> None:
         if (clipboard := QApplication.clipboard()) and (text := clipboard.text().strip()):
@@ -62,19 +70,21 @@ class InputBar(QFrame):
     def _add(self) -> None:
         normalized = normalizeUrl(self.urlInput.text())
         if not normalized:
-            self.showError("Enter a valid http or https URL.")
+            self.showError(tr("input.err_invalid_url", self._lang))
             return
         self.errorLabel.hide()
         self.urlAdded.emit(normalized)
         self.urlInput.clear()
 
     def _import(self) -> None:
-        if (sel := get_open_file_path(self, "Import URL list", "Text files (*.txt)")) and sel.is_file():
+        title = tr("input.import_dialog_title", self._lang)
+        filters = tr("input.text_files_filter", self._lang)
+        if (sel := get_open_file_path(self, title, filters)) and sel.is_file():
             if (urls := parseImportFile(str(sel))):
                 self.errorLabel.hide()
                 self.urlsImported.emit(urls)
             else:
-                self.showError("No valid public URLs were found in that file.")
+                self.showError(tr("input.err_no_valid_urls", self._lang))
 
     def showError(self, message: str) -> None:
         self.errorLabel.setText(message)

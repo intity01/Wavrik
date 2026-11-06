@@ -20,8 +20,8 @@ def build(workspace) -> None:
     workspace.pageContent = QWidget()
     root = QVBoxLayout(workspace.pageContent)
     root.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
-    root.setContentsMargins(20, 16, 20, 16)
-    root.setSpacing(10)
+    root.setContentsMargins(24, 24, 24, 24)
+    root.setSpacing(14)
     root.addLayout(_header(workspace))
     _add_primary_controls(workspace, root)
     _add_queue_regions(workspace, root)
@@ -29,6 +29,7 @@ def build(workspace) -> None:
     workspace.queueContainer.hide()
     workspace.pageScroll.setWidget(workspace.pageContent)
     outer.addWidget(workspace.pageScroll)
+    workspace.setTabOrder(workspace.inputBar.addButton, workspace.downloadOptions.mediaCombo)
 
 
 def _add_primary_controls(workspace, root: QVBoxLayout) -> None:
@@ -97,6 +98,7 @@ def _header(workspace) -> QHBoxLayout:
 
 
 def set_language(workspace, lang: str) -> None:
+    workspace._lang = lang
     workspace.titleLabel.setText(tr("dl.title", lang))
     workspace.subtitleLabel.setText(tr("dl.subtitle", lang))
     workspace.colMedia.setText(tr("dl.col_media", lang))
@@ -105,3 +107,17 @@ def set_language(workspace, lang: str) -> None:
     workspace.colAction.setText(tr("dl.col_action", lang))
     workspace.inputBar.setLanguage(lang)
     workspace.downloadOptions.setLanguage(lang)
+    if hasattr(workspace, "emptyState"):
+        workspace.emptyState.setLanguage(lang)
+    if hasattr(workspace, "healthBanner"):
+        workspace.healthBanner.setLanguage(lang)
+    for card in getattr(workspace, "_cards", {}).values():
+        if hasattr(card, "setLanguage"):
+            card.setLanguage(lang)
+    for i in range(workspace.bannerArea.count()):
+        item = workspace.bannerArea.itemAt(i)
+        if item and item.widget() and hasattr(item.widget(), "setLanguage"):
+            item.widget().setLanguage(lang)
+    count = len(getattr(workspace, "_cards", {}))
+    tpl = tr("dl.queue_count_1" if count == 1 else "dl.queue_count", lang)
+    workspace.queueCount.setText(tpl.replace("{count}", str(count)))

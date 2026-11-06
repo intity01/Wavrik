@@ -30,7 +30,8 @@ def build_stem_rack(page) -> QFrame:
     page.separateStemsBtn.clicked.connect(page._separate_stems)
     page.loadVocalsBtn.clicked.connect(page._load_vocals_stem)
     page.loadInstBtn.clicked.connect(page._load_inst_stem)
-    for w, st in ((QLabel("STEM SEPARATOR", objectName="FieldLabel"), 0), (page.stemModeCombo, 1), (page.separateStemsBtn, 0), (page.loadVocalsBtn, 0), (page.loadInstBtn, 0)):
+    page.lblStem = QLabel("STEM SEPARATOR", objectName="FieldLabel")
+    for w, st in ((page.lblStem, 0), (page.stemModeCombo, 1), (page.separateStemsBtn, 0), (page.loadVocalsBtn, 0), (page.loadInstBtn, 0)):
         row.addWidget(w, st)
     return card
 

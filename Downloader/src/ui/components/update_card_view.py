@@ -4,32 +4,31 @@ from __future__ import annotations
 
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout
 
-from .controls import PrimaryPushButton, ProgressBar, PushButton, ToggleButton
+from src.ui.i18n import tr
+
+from .controls import ProgressBar, PushButton, ToggleButton
 
 
 def build(card) -> None:
     layout = QVBoxLayout(card)
     layout.setContentsMargins(16, 14, 16, 14)
     layout.setSpacing(10)
-    title = QLabel("Software updates")
-    title.setObjectName("SectionTitle")
-    current = QLabel(f"Installed version: {card._manager.getCurrentVersion()}")
-    current.setObjectName("MutedText")
+    card.title = QLabel("Software updates", objectName="SectionTitle")
+    card.current = QLabel(f"Installed version: {card._manager.getCurrentVersion()}", objectName="MutedText")
     configured = card._manager.isConfigured
     message = "Updates are checked through GitHub Releases." if configured else "Updates are not configured for this build."
-    card.statusLabel = QLabel(message)
-    card.statusLabel.setWordWrap(True)
-    card.statusLabel.setObjectName("MutedText")
+    card.statusLabel = QLabel(message, objectName="MutedText", wordWrap=True)
     card.startupCheck = ToggleButton("Check for updates at startup")
     card.startupCheck.setChecked(card._cfg.get("checkUpdatesOnStartup", False))
     card.startupCheck.toggled.connect(card._save_startup_preference)
     card.startupCheck.setEnabled(configured)
     card.progressBar = ProgressBar()
     card.progressBar.hide()
-    layout.addWidget(title)
-    layout.addWidget(current)
+    layout.addWidget(card.title)
+    layout.addWidget(card.current)
     layout.addWidget(card.statusLabel)
-    layout.addLayout(_preference_row("Check for updates at startup", card.startupCheck))
+    pref_row, card.lblPref = _preference_row("Check for updates at startup", card.startupCheck)
+    layout.addLayout(pref_row)
     layout.addWidget(card.progressBar)
     layout.addLayout(_buttons(card))
 
@@ -38,7 +37,7 @@ def _buttons(card) -> QVBoxLayout:
     rows = QVBoxLayout()
     primary = QHBoxLayout()
     secondary = QHBoxLayout()
-    card.checkButton = PrimaryPushButton("Check now")
+    card.checkButton = PushButton("Check now")
     card.checkButton.setEnabled(card._manager.isConfigured)
     card.releaseButton = PushButton("Open release")
     card.downloadButton = PushButton("Download verified package")
@@ -61,9 +60,19 @@ def _buttons(card) -> QVBoxLayout:
     return rows
 
 
-def _preference_row(label: str, control) -> QHBoxLayout:
+def _preference_row(label: str, control) -> tuple[QHBoxLayout, QLabel]:
     row = QHBoxLayout()
     text = QLabel(label)
     row.addWidget(text, 1)
     row.addWidget(control)
-    return row
+    return row, text
+
+
+def set_language(card, lang: str) -> None:
+    card.title.setText(tr("set.software_updates", lang))
+    card.current.setText(tr("set.installed_version", lang).replace("{version}", card._manager.getCurrentVersion()))
+    card.lblPref.setText(tr("set.startup_check", lang))
+    card.checkButton.setText(tr("set.check_now", lang))
+    card.releaseButton.setText(tr("set.open_release", lang))
+    card.downloadButton.setText(tr("set.download_verified", lang))
+    card.folderButton.setText(tr("set.open_download_folder", lang))

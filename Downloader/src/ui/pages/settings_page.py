@@ -32,9 +32,9 @@ class SettingsInterface(QWidget):
         scroll.setWidgetResizable(True)
         content = QWidget()
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(20, 16, 20, 16)
-        layout.setSpacing(10)
-        self.titleLabel = QLabel("Settings", objectName="PageTitle")
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(14)
+        self.titleLabel = QLabel(tr("set.title", "en"), objectName="PageTitle")
         self.subtitleLabel = QLabel(tr("set.subtitle", "en"), objectName="PageSubtitle")
         layout.addWidget(self.titleLabel)
         layout.addWidget(self.subtitleLabel)
@@ -47,6 +47,13 @@ class SettingsInterface(QWidget):
         layout.addStretch(1)
         scroll.setWidget(content)
         root.addWidget(scroll)
+        self.setTabOrder(self.languageCombo, self.themeCombo)
+        self.setTabOrder(self.themeCombo, self.concurrentSpin)
+        self.setTabOrder(self.concurrentSpin, self.clipboardCheck)
+        self.setTabOrder(self.clipboardCheck, self.trayCheck)
+        self.setTabOrder(self.trayCheck, self.openLogsBtn)
+        if hasattr(self.updateCard, "checkButton"):
+            self.setTabOrder(self.openLogsBtn, self.updateCard.checkButton)
 
     def _open_logs(self) -> None:
         log_dir = self._cfg.appDataDir / "logs"
@@ -69,6 +76,8 @@ class SettingsInterface(QWidget):
         self.lblTray.setText(tr("set.tray_label", lang))
         self.lblLogs.setText(tr("set.logs_label", lang))
         self.openLogsBtn.setText(tr("set.open_logs", lang))
+        if hasattr(self.updateCard, "setLanguage"):
+            self.updateCard.setLanguage(lang)
 
     def _save_language(self) -> None:
         lang = str(self.languageCombo.currentData() or "th")

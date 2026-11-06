@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import QFrame
 
 from src.domain.presets import PRESETS, getPreset
 from src.ui.dialogs import get_save_directory
+from src.ui.i18n import tr
 
 from .download_options_view import build, set_language, short_label
 
@@ -20,28 +21,32 @@ class DownloadOptions(QFrame):
     def __init__(self, config, parent=None):
         super().__init__(parent)
         self._cfg = config
+        self._lang = "en"
         self.setObjectName("DownloadOptions")
         build(self)
         self._restore_default()
 
     def setLanguage(self, lang: str) -> None:
+        self._lang = lang
         set_language(self, lang)
 
     def _restore_default(self) -> None:
         preset = getPreset(self._cfg.get("defaultPreset"))
         self.mediaCombo.blockSignals(True)
-        self.mediaCombo.setCurrentText(preset.media_type.title())
+        idx = self.mediaCombo.findData(preset.media_type)
+        self.mediaCombo.setCurrentIndex(max(0, idx))
         self.mediaCombo.blockSignals(False)
-        self._populate_presets(preset.key)
+        self._populate_presets(preset.key, preset.media_type)
         index = self.engineCombo.findData(self._cfg.get("downloadEngine", "auto"))
         self.engineCombo.setCurrentIndex(max(0, index))
 
-    def _media_changed(self, media_type: str) -> None:
-        self._populate_presets(None, media_type.lower())
+    def _media_changed(self, *_args) -> None:
+        media_type = str(self.mediaCombo.currentData() or "audio")
+        self._populate_presets(None, media_type)
         self._preset_changed()
 
     def _populate_presets(self, selected: str | None, media_type: str | None = None) -> None:
-        media_type = media_type or self.mediaCombo.currentText().lower()
+        media_type = media_type or str(self.mediaCombo.currentData() or "audio")
         self.presetCombo.blockSignals(True)
         self.presetCombo.clear()
         for preset in PRESETS:
@@ -66,7 +71,8 @@ class DownloadOptions(QFrame):
         self.engineChanged.emit(engine)
 
     def _browse(self) -> None:
-        selected = get_save_directory(self, "Choose download folder", self.pathInput.text())
+        title = tr("dl.choose_folder_dialog", self._lang)
+        selected = get_save_directory(self, title, self.pathInput.text())
         path = str(selected).strip() if selected else ""
         if not path or path == ".":
             return
@@ -85,5 +91,6 @@ class DownloadOptions(QFrame):
         self.downloadAllButton.setVisible(count > 0)
         self.downloadAllButton.setEnabled(count > 0 and can_download)
         suffix = "" if count == 1 else "s"
-        self.downloadAllButton.setText(f"Download all ({count})" if count else "Download all")
+        txt = tr("dl.download_all_count", self._lang).replace("{count}", str(count)) if count else tr("dl.download_all", self._lang)
+        self.downloadAllButton.setText(txt)
         self.downloadAllButton.setAccessibleDescription(f"Download {count} queued item{suffix}")
