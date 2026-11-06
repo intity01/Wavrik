@@ -20,7 +20,7 @@ LIGHT = {
     "accent_border": "#0E1116",
     "success": "#15803D",
     "warning": "#B45309",
-    "danger": "#B42318",
+    "danger": "#F85149",
 }
 
 DARK = {
@@ -39,7 +39,7 @@ DARK = {
     "accent_border": "#F1F5F9",
     "success": "#22C55E",
     "warning": "#F59E0B",
-    "danger": "#EF4444",
+    "danger": "#F85149",
 }
 
 # Camelot wheel position 1..12 -> hue. The same hue marks the minor (A) and major (B) key at that position.

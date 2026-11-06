@@ -5,7 +5,10 @@ from __future__ import annotations
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
-from .controls import ElidedLabel, PrimaryPushButton, ProgressBar, ToolButton
+from src.ui.i18n import tr
+
+from .controls import ElidedLabel, ProgressBar, PushButton, ToolButton
+from .queue_card_state import action_text
 
 
 def build(card) -> None:
@@ -33,7 +36,7 @@ def _media_column(card) -> QVBoxLayout:
     col.setSpacing(2)
     card._title = ElidedLabel(card._videoTitle)
     card._title.setObjectName("SectionTitle")
-    card._lblMeta = ElidedLabel("Waiting for metadata")
+    card._lblMeta = ElidedLabel(tr("queue.waiting_metadata", getattr(card, "_lang", "en")))
     card._lblMeta.setObjectName("MutedText")
     col.addWidget(card._title)
     col.addWidget(card._lblMeta)
@@ -76,10 +79,11 @@ def _status_column(card) -> QVBoxLayout:
 def _action_column(card) -> QHBoxLayout:
     row = QHBoxLayout()
     row.setSpacing(6)
-    card._btnDl = PrimaryPushButton("Download")
+    lang = getattr(card, "_lang", "en")
+    card._btnDl = PushButton(action_text(getattr(card, "_state", "fetching"), lang))
     card._btnDl.setAccessibleName("Download this item")
     card._btnDl.clicked.connect(card._handle_action)
-    card._btnDel = ToolButton("Remove")
+    card._btnDel = ToolButton(tr("queue.action_remove", lang))
     card._btnDel.setAccessibleName("Remove this item from the queue")
     card._btnDel.clicked.connect(lambda: card.removeRequested.emit(card._url))
     row.addWidget(card._btnDl)

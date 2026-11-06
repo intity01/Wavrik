@@ -9,6 +9,7 @@ from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import QFrame
 
 from src.services.platform_actions import open_parent
+from src.ui.i18n import tr
 from src.ui.workers.update_worker import (
     CheckUpdateWorker,
     DownloadUpdateWorker,
@@ -28,18 +29,23 @@ class UpdateCard(QFrame):
         self._cfg = config
         self._info = None
         self._busy = False
+        self._lang = "en"
         self._downloadedPath: Path | None = None
         self._pool = QThreadPool(self)
         self._pool.setMaxThreadCount(1)
         self.setObjectName("SettingsCard")
         update_card_view.build(self)
 
+    def setLanguage(self, lang: str) -> None:
+        self._lang = lang
+        update_card_view.set_language(self, lang)
+
     def check(self, silent: bool = False) -> None:
         if self._busy:
             return
         self._busy = True
         if not silent:
-            self.statusLabel.setText("Checking GitHub Releases…")
+            self.statusLabel.setText(tr("set.checking_updates", self._lang))
         self.checkButton.setEnabled(False)
         signals = UpdateSignals()
         signals.checked.connect(self._checked)
@@ -54,25 +60,23 @@ class UpdateCard(QFrame):
         self.releaseButton.setVisible(bool(info))
         self.downloadButton.setVisible(bool(info and info.can_download_safely))
         if not info:
-            self.statusLabel.setText("You are using the latest published version.")
+            self.statusLabel.setText(tr("set.latest_version", self._lang))
             return
         self.statusLabel.setText(self._update_message(info))
         self.updateAvailable.emit(info)
 
     def _update_message(self, info) -> str:
-        if info.can_download_safely:
-            return f"Version {info.version} is available as an immutable, SHA-256 verified release."
-        return f"Version {info.version} is available. Review and download it on GitHub."
+        k = "set.update_available_safe" if info.can_download_safely else "set.update_available_generic"
+        return tr(k, self._lang).replace("{version}", str(info.version))
 
     def _confirm_download(self) -> None:
         if not self._info or not self._info.can_download_safely:
             return
         dialog = MessageBox(
-            "Download update package",
-            "The package will be downloaded from GitHub and checked against its SHA-256 digest. "
-            "The app will not run the installer automatically.",
+            tr("set.download_dialog_title", self._lang),
+            tr("set.download_dialog_msg", self._lang),
             self,
-            "Download package",
+            tr("set.download_dialog_btn", self._lang),
         )
         if dialog.exec():
             self._start_download()
@@ -83,7 +87,7 @@ class UpdateCard(QFrame):
         self.progressBar.setValue(0)
         self.progressBar.show()
         self.downloadButton.setEnabled(False)
-        self.statusLabel.setText("Downloading and verifying the update package…")
+        self.statusLabel.setText(tr("set.downloading_update", self._lang))
         signals = UpdateSignals()
         signals.progress.connect(self.progressBar.setValue)
         signals.downloaded.connect(self._downloaded)
@@ -99,7 +103,7 @@ class UpdateCard(QFrame):
         self.progressBar.setValue(100)
         self.downloadButton.setEnabled(True)
         self.folderButton.show()
-        self.statusLabel.setText("The package was downloaded and verified. Install it manually when ready.")
+        self.statusLabel.setText(tr("set.download_complete", self._lang))
 
     def _failed(self, message: str) -> None:
         self._busy = False

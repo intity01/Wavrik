@@ -24,10 +24,17 @@ class FluentIcon:
 
 
 class NavigationPanel(QWidget):
+    PAGE_I18N = {
+        "WorkspaceInterface": ("nav.downloads", "nav.downloads_tip"),
+        "LibraryInterface": ("nav.library", "nav.library_tip"),
+        "AudioToolsInterface": ("nav.audio_tools", "nav.audio_tools_tip"),
+        "SettingsInterface": ("nav.settings", "nav.settings_tip"),
+    }
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("NavigationPanel")
-        self.setFixedWidth(184)
+        self.setFixedWidth(176)
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 12, 10, 12)
         root.setSpacing(4)
@@ -70,6 +77,14 @@ class NavigationPanel(QWidget):
         self._brand_sub.setText(tr("brand.subtitle", lang))
         for lbl, key in self._sections:
             lbl.setText(tr(key, lang))
+        for key, button in self.buttons.items():
+            if key in self.PAGE_I18N:
+                t_key, tip_key = self.PAGE_I18N[key]
+                txt = tr(t_key, lang)
+                button.setText(txt)
+                button.setAccessibleName(f"Go to {txt}")
+                if tip_key:
+                    button.setToolTip(tr(tip_key, lang))
 
     def updateStyles(self) -> None:
         self.update()

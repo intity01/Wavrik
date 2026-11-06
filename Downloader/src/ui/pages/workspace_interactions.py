@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from src.core.parser import normalizeUrl, parseImportFile, parseImportText
 from src.ui.components.banners import ClipboardBanner, PlaylistBanner, UpdateBanner
+from src.ui.i18n import tr
 
 
 class WorkspaceInteractionMixin:
@@ -13,6 +14,7 @@ class WorkspaceInteractionMixin:
         if current:
             current.deleteLater()
         banner = PlaylistBanner(title, count)
+        banner.setLanguage(getattr(self, "_lang", "en"))
         urls = [item.get("url", "") for item in entries]
         banner.addAllRequested.connect(lambda: self.addUrls(urls))
         banner.dismissed.connect(banner.deleteLater)
@@ -26,17 +28,18 @@ class WorkspaceInteractionMixin:
         if current:
             current.deleteLater()
         banner = ClipboardBanner(url)
+        banner.setLanguage(getattr(self, "_lang", "en"))
         banner.addRequested.connect(self.addUrl)
         banner.dismissed.connect(banner.deleteLater)
         self.bannerArea.addWidget(banner)
         self._clipboardBanner = banner
-
 
     def showUpdateBanner(self, info, view_callback) -> None:
         current = getattr(self, "_updateBanner", None)
         if current:
             current.deleteLater()
         banner = UpdateBanner(info)
+        banner.setLanguage(getattr(self, "_lang", "en"))
         banner.viewRequested.connect(view_callback)
         banner.dismissed.connect(banner.deleteLater)
         self.bannerArea.addWidget(banner)
@@ -60,8 +63,10 @@ class WorkspaceInteractionMixin:
         has_items = bool(self._cards)
         self.queueContainer.setVisible(has_items)
         self.emptyState.setVisible(not has_items)
-        suffix = "" if len(self._cards) == 1 else "s"
-        self.queueCount.setText(f"{len(self._cards)} item{suffix}")
+        lang = getattr(self, "_lang", "en")
+        count = len(self._cards)
+        tpl = tr("dl.queue_count_1" if count == 1 else "dl.queue_count", lang)
+        self.queueCount.setText(tpl.replace("{count}", str(count)))
         can_download = any(card.canQueueDownload() for card in self._cards.values())
         self.downloadOptions.setQueueState(len(self._cards), can_download)
 

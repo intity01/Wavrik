@@ -15,8 +15,8 @@ AUDIO_EXTS = {".wav", ".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus"}
 
 def build_library_ui(page) -> None:
     root = QVBoxLayout(page)
-    root.setContentsMargins(20, 16, 20, 16)
-    root.setSpacing(10)
+    root.setContentsMargins(24, 24, 24, 24)
+    root.setSpacing(14)
     page.summary = QLabel(objectName="NeutralBadge")
     header, labels = QHBoxLayout(), QVBoxLayout()
     page.titleLabel = QLabel("Library", objectName="PageTitle")
@@ -40,6 +40,7 @@ def build_library_ui(page) -> None:
     for w, st in ((page.searchBar, 1), (page.typeFilter, 0), (page.statusFilter, 0)):
         filters.addWidget(w, st)
     _build_table_and_scroll(page, root, header, filters)
+    _wire_tab_order(page)
 
 
 def _build_table_and_scroll(page, root: QVBoxLayout, header: QHBoxLayout, filters: QHBoxLayout) -> None:
@@ -68,18 +69,26 @@ def _build_table_and_scroll(page, root: QVBoxLayout, header: QHBoxLayout, filter
         root.addWidget(w, st)
 
 
+def _wire_tab_order(page) -> None:
+    page.setTabOrder(page.searchBar, page.typeFilter)
+    page.setTabOrder(page.typeFilter, page.statusFilter)
+    page.setTabOrder(page.statusFilter, page.addLocalBtn)
+    page.setTabOrder(page.addLocalBtn, page.clearBtn)
+    page.setTabOrder(page.clearBtn, page.loadMoreBtn)
+
+
 def record_local_file(history_manager, path: Path) -> None:
     media = "video" if path.suffix.lower() in VIDEO_EXTS else "audio"
     fmt = path.suffix.lstrip(".").upper() or "FILE"
     history_manager.addEntry("", path.stem, media, fmt, str(path), True, path.stat().st_size, status="completed")
 
 
-def empty_message(entries: list[dict], stats: dict) -> str:
+def empty_message(entries: list[dict], stats: dict, lang: str = "en") -> str:
     if entries:
         return ""
     if stats["totalDownloads"]:
-        return "No library items match the current search or filters."
-    return "Your completed downloads and local files will appear here."
+        return tr("lib.empty_search", lang)
+    return tr("lib.empty_initial", lang)
 
 
 def matches_entry(entry: dict, query: str, media: str | None, status: str | None, cache: dict[str, dict]) -> bool:
@@ -89,6 +98,42 @@ def matches_entry(entry: dict, query: str, media: str | None, status: str | None
     return (not query or query in haystack) and (not media or entry.get("mediaType") == media) and (not status or entry.get("status") == status)
 
 
-def summary_text(stats: dict) -> str:
+def summary_text(stats: dict, lang: str = "en") -> str:
     t = stats["totalDownloads"]
-    return f"{t} records · {stats['successful']} completed · {stats['failed']} failed · {stats['totalSizeMb']:.1f} MB" if t else "No downloads recorded yet."
+    if not t:
+        return tr("lib.summary_none", lang)
+    tpl = tr("lib.summary", lang)
+    return tpl.format(t=t, s=stats["successful"], f=stats["failed"], sz=stats["totalSizeMb"])
+
+
+def find_cached_analysis(cache: dict[str, dict], file_path: str) -> dict | None:
+    key = str(Path(file_path))
+    if key in cache:
+        val = cache.pop(key)
+        cache[key] = val
+        return val
+    import os
+    target_norm = os.path.normcase(os.path.abspath(file_path))
+    for k, v in list(cache.items()):
+        if os.path.normcase(os.path.abspath(k)) == target_norm:
+            cache.pop(k, None)
+            cache[k] = v
+            return v
+    return None
+
+
+def set_language(page, lang: str) -> None:
+    page.titleLabel.setText(tr("lib.title", lang))
+    page.subtitleLabel.setText(tr("lib.subtitle", lang))
+    page.searchBar.setPlaceholderText(tr("lib.search_placeholder", lang))
+    page.colTrack.setText(tr("lib.col_track", lang))
+    page.colHarmony.setText(tr("lib.col_harmony", lang))
+    page.colStatus.setText(tr("lib.col_status", lang))
+    page.colActions.setText(tr("lib.col_actions", lang))
+    page.addLocalBtn.setText(tr("lib.btn_add_local", lang))
+    page.clearBtn.setText(tr("lib.btn_clear", lang))
+    page.loadMoreBtn.setText(tr("lib.btn_load_more", lang))
+    for i, t in enumerate([tr("lib.filter_all_media", lang), tr("lib.filter_audio", lang), tr("lib.filter_video", lang)]):
+        page.typeFilter.setItemText(i, t)
+    for i, s in enumerate([tr("lib.filter_all_statuses", lang), tr("lib.filter_completed", lang), tr("lib.filter_failed", lang), tr("lib.filter_cancelled", lang)]):
+        page.statusFilter.setItemText(i, s)
