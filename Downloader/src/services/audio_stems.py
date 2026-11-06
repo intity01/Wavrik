@@ -9,15 +9,11 @@ from pathlib import Path
 import shutil, sys, tempfile, wave  # noqa: E401
 from typing import Any
 
-from src.core.process import run_cancellable_process
+from src.core.process import is_cancellation_requested, run_cancellable_process
 from src.core.runtime import find_ffmpeg
 from src.services.audio_pitch import unique_export_path
 
-STEM_MODES = (
-    ("Ensemble RoFormer + Phase Lock (Best SDR)", "roformer_ensemble"),
-    ("Mel-Band RoFormer Fast + Phase Lock", "roformer_fast"),
-    ("Instant Studio Mid-Side DSP (Zero-Download)", "dsp_2stem"),
-)
+STEM_MODES = (("Ensemble RoFormer + Phase Lock (Best SDR)", "roformer_ensemble"), ("Mel-Band RoFormer Fast + Phase Lock", "roformer_fast"), ("Instant Studio Mid-Side DSP (Zero-Download)", "dsp_2stem"))
 _MEL_MODEL, _BS_MODEL = "vocals_mel_band_roformer.ckpt", "model_bs_roformer_ep_317_sdr_12.9755.ckpt"
 
 
@@ -34,21 +30,27 @@ def separate_stems(
     src = Path(source).resolve()
     if not src.is_file():
         raise FileNotFoundError(f"Source audio not found: {src}")
-    if cancel_check and cancel_check():
+    if is_cancellation_requested(cancel_check):
         raise RuntimeError("Stem separation cancelled.")
-    out_dir = Path(output_dir).resolve() if output_dir else src.parent
-    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir := Path(output_dir).resolve() if output_dir else src.parent).mkdir(parents=True, exist_ok=True)
     voc_dst, inst_dst = unique_export_path(out_dir, f"{src.stem}_[Vocals].wav"), unique_export_path(out_dir, f"{src.stem}_[Instrumental].wav")
     with tempfile.TemporaryDirectory(prefix="wavrik-stems-", dir=out_dir) as tmp:
         stage = Path(tmp)
         master_wav, sr, ch = _prepare_master_wav(src, stage / "master.wav", cancel_check)
         raw_inst, actual_mode = _extract_instrumental(master_wav, stage, mode, (sr, ch), cancel_check)
-        phase_lock_stems(master_wav, raw_inst, voc_dst, inst_dst, cancel_check)
+        if is_cancellation_requested(cancel_check):
+            raise RuntimeError("Stem separation cancelled.")
+        tmp_v, tmp_i = stage / "v.wav", stage / "i.wav"
+        phase_lock_stems(master_wav, raw_inst, tmp_v, tmp_i, cancel_check)
+        if is_cancellation_requested(cancel_check):
+            raise RuntimeError("Stem separation cancelled.")
+        os.replace(tmp_v, voc_dst)
+        os.replace(tmp_i, inst_dst)
     return StemResult(vocals_path=voc_dst, instrumental_path=inst_dst, mode_used=actual_mode)
 
 
 def phase_lock_stems(master_wav: Path, inst_est_wav: Path, voc_dst: Path, inst_dst: Path, cancel_check: Any = None) -> None:
-    if cancel_check and cancel_check():
+    if is_cancellation_requested(cancel_check):
         raise RuntimeError("Stem separation cancelled.")
     m_pcm, sr, ch = _read_pcm16(master_wav)
     i_pcm, _, _ = _read_pcm16(inst_est_wav)
@@ -58,6 +60,8 @@ def phase_lock_stems(master_wav: Path, inst_est_wav: Path, voc_dst: Path, inst_d
         v = max(-32768, min(32767, m - (i_pcm[idx] if idx < n_inst else 0)))
         i = max(-32768, min(32767, m - v))
         v_pcm[idx], i_locked[idx] = m - i, i
+    if is_cancellation_requested(cancel_check):
+        raise RuntimeError("Stem separation cancelled.")
     _write_pcm16(voc_dst, v_pcm, sr, ch)
     _write_pcm16(inst_dst, i_locked, sr, ch)
 
@@ -86,8 +90,7 @@ def _try_roformer_cli(sep_bin: str, master_wav: Path, stage: Path, mode: str, sr
 
 def _run_sep_model(sep_bin: str, master_wav: Path, out_dir: Path, model: str, sr_ch: tuple[int, int], cancel_check: Any = None) -> Path | None:
     out_dir.mkdir(parents=True, exist_ok=True)
-    model_dir = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "MediaDownloaderPRO" / "models"
-    model_dir.mkdir(parents=True, exist_ok=True)
+    (model_dir := Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "MediaDownloaderPRO" / "models").mkdir(parents=True, exist_ok=True)
     cmd = [sep_bin, str(master_wav), "-m", model, "--model_file_dir", str(model_dir), "--output_dir", str(out_dir), "--single_stem", "Instrumental", "--use_autocast"]
     proc = run_cancellable_process(cmd, timeout=900, cancel_check=cancel_check)
     cands = sorted(out_dir.glob("*Instrumental*.wav"))
@@ -127,8 +130,7 @@ def _normalize_wav_spec(src: Path, dst: Path, sr_ch: tuple[int, int], cancel_che
 def _read_pcm16(path: Path) -> tuple[array, int, int]:
     with wave.open(str(path), "rb") as wf:
         sr, ch, frames = wf.getframerate(), wf.getnchannels(), wf.readframes(wf.getnframes())
-    pcm = array("h")
-    pcm.frombytes(frames[: (len(frames) // 2) * 2])
+    (pcm := array("h")).frombytes(frames[: (len(frames) // 2) * 2])
     return pcm, sr, ch
 
 

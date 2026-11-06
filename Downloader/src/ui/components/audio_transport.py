@@ -41,25 +41,30 @@ class AudioTransportController(QObject):
         self.stop()
 
     def setSlotB(self, path: str | Path | None) -> None:
+        old_b = self._slot_b
         self._slot_b = Path(path) if path else None
-        if self._current_source == self._slot_b and path is None:
+        if self._current_source == old_b and path is None:
             self._current_source = None
+            if self._active_slot == "B":
+                self.stop()
+                self._active_slot = "A"
 
-    def playSlot(self, slot: str = "A", start_sec: float = 0.0) -> bool:
+    def playSlot(self, slot: str = "A", start_sec: float | None = None) -> bool:
         target = self._slot_b if slot == "B" else self._slot_a
         if not target or not target.is_file():
             return False
         self._active_slot = "B" if slot == "B" else "A"
-        pos_ms = max(0, int(start_sec * 1000))
+        pos_ms = max(0, int(start_sec * 1000)) if (start_sec is not None and start_sec >= 0) else None
         if self._player:
             if self._current_source == target:
-                if start_sec >= 0:
+                if pos_ms is not None:
                     self._player.setPosition(pos_ms)
                 if self._player.playbackState() != QMediaPlayer.PlaybackState.PlayingState:
                     self._player.play()
             else:
                 self._current_source = target
-                self._pending_seek_ms = pos_ms if start_sec > 0 else None
+                if pos_ms is not None:
+                    self._pending_seek_ms = pos_ms
                 self._player.stop()
                 self._player.setSource(QUrl.fromLocalFile(str(target)))
                 if self._pending_seek_ms is not None and self._is_loaded():

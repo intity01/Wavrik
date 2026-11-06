@@ -10,7 +10,7 @@ import sys
 import tempfile
 from typing import Any
 
-from src.core.process import run_cancellable_process
+from src.core.process import is_cancellation_requested, run_cancellable_process
 from src.core.runtime import find_ffmpeg, find_rubberband
 
 _FORMATS = {
@@ -71,6 +71,8 @@ def render_audio_clip(
             _render_with_r3(ffmpeg_exe, rb_exe, src, staged, opts, cancel_check)
         else:
             _render_with_ffmpeg(ffmpeg_exe, src, staged, opts, cancel_check)
+        if is_cancellation_requested(cancel_check):
+            raise RuntimeError("Audio rendering cancelled.")
         if not staged.is_file() or staged.stat().st_size <= 44:
             raise RuntimeError("Rendered output file was empty or invalid.")
         os.replace(staged, dst)
@@ -130,8 +132,8 @@ def _render_with_ffmpeg(ffmpeg_exe: str, src: Path, dst: Path, opts: tuple, canc
 def _run_cmd(cmd: list[str], cancel_check: Any = None) -> None:
     proc = run_cancellable_process(cmd, timeout=300, cancel_check=cancel_check)
     if proc.returncode != 0:
-        detail = (proc.stderr or proc.stdout or "Audio processing failed").strip().splitlines()[-1]
-        raise RuntimeError(detail)
+        lines = ((proc.stderr or "").strip() or (proc.stdout or "").strip() or "Audio processing failed").splitlines()
+        raise RuntimeError(lines[-1] if lines else "Audio processing failed")
 
 
 def _compact_key(key_name: str) -> str:

@@ -87,7 +87,7 @@ class AudioToolsInterface(QWidget):
     def _load_inst_stem(self) -> None: self._instStem and self._instStem.is_file() and self.loadFile(self._instStem)
     def _on_seek_requested(self, sec: float) -> None:
         self.statusLabel.setText(f"Playhead set to {int(sec // 60)}:{int(sec % 60):02d} (25s preview slice)")
-        self.transport.isPlaying() and self.transport.playSlot(self.transport.activeSlot(), sec)
+        self.transport.playSlot(self.transport.activeSlot(), sec) if self.transport.isPlaying() else self.transport.seek(sec)
     def _update_preview_labels(self, *_args) -> None:
         update_preview_labels(self)
     def _play_original(self) -> None:
@@ -132,6 +132,7 @@ class AudioToolsInterface(QWidget):
 
     def cleanup(self) -> None:
         self._busy = False
+        self.transport.stop()
         getattr(self, "_activeWorker", None) and hasattr(self._activeWorker, "cancel") and self._activeWorker.cancel()
         getattr(self, "_batchDialog", None) and hasattr(self._batchDialog, "_cancel_and_wait") and self._batchDialog._cancel_and_wait()
         self._pool.clear()

@@ -32,6 +32,12 @@ def kill_process_tree(proc: subprocess.Popen) -> None:
         proc.wait(timeout=1.0)
     except Exception:
         pass
+    for s in (proc.stdout, proc.stderr, proc.stdin):
+        if s:
+            try:
+                s.close()
+            except Exception:
+                pass
 
 
 def is_cancellation_requested(cancel_check: Callable[[], bool] | Any | None) -> bool:

@@ -5,6 +5,7 @@ import math
 from pathlib import Path
 import subprocess
 import sys
+import threading
 import time
 import wave
 from unittest.mock import MagicMock, patch
@@ -430,3 +431,139 @@ def test_a14_audio_tools_on_analyzed_updates_history(qtbot, config, history, tmp
     assert cached is not None
     assert cached["key"] == "D major"
     assert cached["bpm"] == 130.0
+
+
+def test_a5_stem_separation_event_token_cancellation(tmp_path: Path):
+    src = _create_wav(tmp_path / "event_song.wav")
+    ev = threading.Event()
+    ev.set()
+    try:
+        separate_stems(src, tmp_path, cancel_check=ev)
+        assert False, "Should have raised cancelled on Event token"
+    except RuntimeError as exc:
+        assert "cancelled" in str(exc).lower()
+
+
+def test_a5_audio_pitch_whitespace_stderr_handling(tmp_path: Path):
+    from src.services.audio_pitch import _run_cmd
+
+    with patch("src.services.audio_pitch.run_cancellable_process") as mock_proc:
+        mock_proc.return_value = subprocess.CompletedProcess(
+            args=["ffmpeg"], returncode=1, stdout="", stderr="   \n   \n   ",
+        )
+        try:
+            _run_cmd(["ffmpeg", "-i", "dummy.wav"])
+            assert False, "Should have raised RuntimeError"
+        except RuntimeError as exc:
+            assert "Audio processing failed" in str(exc)
+
+
+def test_a8_transport_set_slot_b_none_cleans_source_and_resets_slot(tmp_path: Path):
+    transport = AudioTransportController()
+    wav_a = _create_wav(tmp_path / "track_a.wav")
+    wav_b = _create_wav(tmp_path / "track_b.wav")
+    transport.setSlotA(wav_a)
+    transport.setSlotB(wav_b)
+
+    mock_player = MagicMock()
+    mock_player.playbackState.return_value = QMediaPlayer.PlaybackState.PlayingState
+    mock_player.mediaStatus.return_value = QMediaPlayer.MediaStatus.LoadedMedia
+    transport._player = mock_player
+
+    transport.playSlot("B", 5.0)
+    assert transport.activeSlot() == "B"
+    assert transport._current_source == wav_b
+
+    # Clearing Slot B should reset _current_source and switch slot back to A
+    transport.setSlotB(None)
+    assert transport._slot_b is None
+    assert transport._current_source is None
+    assert transport.activeSlot() == "A"
+    assert not transport.isPlaying()
+
+
+def test_a8_audio_tools_seek_while_stopped(qtbot, config, history, tmp_path: Path):
+    wav = _create_wav(tmp_path / "stop_seek.wav")
+    page = AudioToolsInterface(config, history)
+    qtbot.addWidget(page)
+    page.loadFile(wav, {"key": "C major", "bpm": 120.0})
+
+    mock_player = MagicMock()
+    mock_player.playbackState.return_value = QMediaPlayer.PlaybackState.StoppedState
+    mock_player.mediaStatus.return_value = QMediaPlayer.MediaStatus.LoadedMedia
+    page.transport._player = mock_player
+
+    # Case 1: Before initial playback, waveform seek records pending seek
+    page._on_seek_requested(18.0)
+    assert "0:18" in page.statusLabel.text()
+    assert page.transport._pending_seek_ms == 18000
+
+    # Case 2: When source is loaded in transport, seeking while stopped calls setPosition directly
+    page.transport._current_source = wav
+    page._on_seek_requested(24.0)
+    assert "0:24" in page.statusLabel.text()
+    mock_player.setPosition.assert_called_with(24000)
+
+
+def test_a8_transport_preserves_pending_seek_when_play_without_time(tmp_path: Path):
+    transport = AudioTransportController()
+    wav = _create_wav(tmp_path / "pending_seek.wav")
+    transport.setSlotA(wav)
+
+    mock_player = MagicMock()
+    mock_player.playbackState.return_value = QMediaPlayer.PlaybackState.StoppedState
+    mock_player.mediaStatus.return_value = QMediaPlayer.MediaStatus.LoadingMedia
+    transport._player = mock_player
+
+    # Set seek before starting playback
+    transport.seek(25.0)
+    assert transport._pending_seek_ms == 25000
+
+    # Start playback without specifying start_sec (default None)
+    transport.playSlot("A")
+    # Must preserve the 25000ms pending seek rather than overwriting to 0
+    assert transport._pending_seek_ms == 25000
+
+    # Once loaded, deferred seek triggers
+    transport._on_media_status(QMediaPlayer.MediaStatus.LoadedMedia)
+    mock_player.setPosition.assert_called_with(25000)
+    assert transport._pending_seek_ms is None
+
+
+def test_a14_history_manager_caches_local_file_analysis(history, tmp_path: Path):
+    local_song = tmp_path / "local_song.wav"
+    local_song.write_bytes(b"RIFF dummy wav data")
+
+    # Local file not yet in history
+    assert history.getCachedAnalysis(local_song) is None
+
+    # Audio Tools analyzes the local file and updates history
+    analysis_data = {"key": "E minor", "bpm": 140.0, "camelot": "9A"}
+    history.updateAnalysis(str(local_song), analysis_data)
+
+    # Must be cached in history and immediately retrievable!
+    cached = history.getCachedAnalysis(local_song)
+    assert cached is not None
+    assert cached["key"] == "E minor"
+    assert cached["bpm"] == 140.0
+
+
+def test_a14_history_manager_get_cached_empty_or_none(history):
+    assert history.getCachedAnalysis(None) is None
+    assert history.getCachedAnalysis("") is None
+
+
+def test_a8_cleanup_stops_transport(qtbot, config, history, tmp_path: Path):
+    wav = _create_wav(tmp_path / "cleanup_test.wav")
+    page = AudioToolsInterface(config, history)
+    qtbot.addWidget(page)
+    page.loadFile(wav, {"key": "C major", "bpm": 120.0})
+
+    mock_player = MagicMock()
+    mock_player.playbackState.return_value = QMediaPlayer.PlaybackState.PlayingState
+    page.transport._player = mock_player
+    page.transport._playing = True
+
+    page.cleanup()
+    assert not page.transport.isPlaying()
+    assert mock_player.stop.called

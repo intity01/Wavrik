@@ -46,18 +46,10 @@ class HistoryManager:
     ) -> HistoryItem:
         rec = record_or_url if isinstance(record_or_url, HistoryRecord) else _unpack_legacy_record(record_or_url or "", args, kwargs)
         entry: HistoryItem = {
-            "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
-            "url": rec.url,
-            "title": rec.title or "Untitled",
-            "mediaType": rec.media_type,
-            "format": rec.format,
-            "filePath": rec.file_path,
-            "success": rec.is_success,
-            "status": rec.status or ("completed" if rec.is_success else "failed"),
-            "fileSize": rec.file_size,
-            "error": rec.error,
-            "thumbnailPath": rec.thumbnail_path,
-            "analysis": rec.analysis or {},
+            "timestamp": datetime.now(UTC).isoformat(timespec="seconds"), "url": rec.url, "title": rec.title or "Untitled",
+            "mediaType": rec.media_type, "format": rec.format, "filePath": rec.file_path, "success": rec.is_success,
+            "status": rec.status or ("completed" if rec.is_success else "failed"), "fileSize": rec.file_size,
+            "error": rec.error, "thumbnailPath": rec.thumbnail_path, "analysis": rec.analysis or {},
         }
         with self._lock:
             self.history.insert(0, entry)
@@ -65,11 +57,13 @@ class HistoryManager:
             self._save()
         return entry
 
-    def updateAnalysis(self, file_path: str, analysis: dict[str, Any]) -> None:
+    def updateAnalysis(self, file_path: str | Path, analysis: dict[str, Any]) -> None:
         if not file_path or not isinstance(analysis, dict):
             return
         compact = {k: analysis[k] for k in _ANALYSIS_KEYS if k in analysis}
-        target_norm = os.path.normcase(os.path.abspath(file_path))
+        if not compact:
+            return
+        target_norm = os.path.normcase(os.path.abspath(str(file_path)))
         with self._lock:
             changed = False
             for e in self.history:
@@ -77,10 +71,22 @@ class HistoryManager:
                 if raw_path and os.path.normcase(os.path.abspath(raw_path)) == target_norm:
                     e["analysis"] = compact
                     changed = True
+            if not changed:
+                p = Path(file_path)
+                sz, fmt = p.stat().st_size if p.is_file() else 0, p.suffix.lstrip(".").upper() if p.suffix else "AUDIO"
+                self.history.insert(0, {
+                    "timestamp": datetime.now(UTC).isoformat(timespec="seconds"), "url": "", "title": p.stem or "Local Audio",
+                    "mediaType": "audio", "format": fmt, "filePath": str(p), "success": True, "status": "completed",
+                    "fileSize": sz, "error": "", "thumbnailPath": "", "analysis": compact,
+                })
+                self.history = self.history[:1000]
+                changed = True
             if changed:
                 self._save()
 
-    def getCachedAnalysis(self, file_path: str | Path) -> dict[str, Any] | None:
+    def getCachedAnalysis(self, file_path: str | Path | None) -> dict[str, Any] | None:
+        if not file_path:
+            return None
         target_norm = os.path.normcase(os.path.abspath(str(file_path)))
         with self._lock:
             for e in self.history:
@@ -134,14 +140,10 @@ def _migrate_entry(entry: dict[str, Any]) -> dict[str, Any]:
 def _unpack_legacy_record(record_or_url: str, args: tuple[Any, ...], kwargs: dict[str, Any]) -> HistoryRecord:
     k = kwargs.get
     return HistoryRecord(
-        url=record_or_url or k("url", ""),
-        title=args[0] if len(args) > 0 else k("title", "Untitled"),
+        url=record_or_url or k("url", ""), title=args[0] if len(args) > 0 else k("title", "Untitled"),
         media_type=args[1] if len(args) > 1 else k("mediaType", k("media_type", "")),
-        format=args[2] if len(args) > 2 else k("format", ""),
-        file_path=args[3] if len(args) > 3 else k("filePath", k("file_path", "")),
+        format=args[2] if len(args) > 2 else k("format", ""), file_path=args[3] if len(args) > 3 else k("filePath", k("file_path", "")),
         is_success=args[4] if len(args) > 4 else k("isSuccess", k("is_success", True)),
-        file_size=args[5] if len(args) > 5 else k("fileSize", k("file_size", 0)),
-        status=args[6] if len(args) > 6 else k("status"),
-        error=args[7] if len(args) > 7 else k("error", ""),
-        thumbnail_path=args[8] if len(args) > 8 else k("thumbnailPath", k("thumbnail_path", "")),
+        file_size=args[5] if len(args) > 5 else k("fileSize", k("file_size", 0)), status=args[6] if len(args) > 6 else k("status"),
+        error=args[7] if len(args) > 7 else k("error", ""), thumbnail_path=args[8] if len(args) > 8 else k("thumbnailPath", k("thumbnail_path", "")),
     )
