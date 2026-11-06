@@ -5,22 +5,28 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication
-
 from src.core.config import Config
-from src.core.crash_handler import install_crash_handler
 from src.core.logger import Logger
 from src.core.runtime import application_root, find_deno, find_ffmpeg, resource_root
-from src.core.tray import TrayIcon
 from src.core.updater import UpdateManager
 from src.domain.media_downloader import MediaDownloader
 from src.services.history_manager import HistoryManager
-from src.ui.main_window import MediaDownloaderUI
-from src.ui.window_setup import WindowDependencies
 
 
-def _create_app() -> QApplication:
+def __getattr__(name: str):
+    if name == "TrayIcon":
+        from src.core.tray import TrayIcon
+        return TrayIcon
+    if name == "WindowDependencies":
+        from src.ui.window_setup import WindowDependencies
+        return WindowDependencies
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def _create_app():
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtWidgets import QApplication
+
     app = QApplication(sys.argv)
     app.setApplicationName(Config.APP_NAME)
     app.setApplicationVersion(Config.VERSION)
@@ -53,15 +59,19 @@ def _attach_console() -> None:
             pass
 
 
+def _mod_attr(name: str):
+    return getattr(sys.modules[__name__], name)
+
+
 def _test_startup() -> int:
     config = Config()
     logger = Logger(logDir=config.appDataDir / "logs")
     try:
-        tray = TrayIcon()
+        tray = _mod_attr("TrayIcon")()
         downloader = MediaDownloader(logger, config)
         updater = UpdateManager(Config.VERSION, Config.GITHUB_REPO, logger)
         history = HistoryManager(config, logger)
-        WindowDependencies(
+        _mod_attr("WindowDependencies")(
             config=config, logger=logger, downloader=downloader,
             updater=updater, tray=tray, history=history,
         )
@@ -81,24 +91,38 @@ def _test_startup() -> int:
     return 0 if ok else 1
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = sys.argv[1:] if argv is None else argv
-    if "--version" in args or "--test-startup" in args:
+def _handle_cli(args: list[str]) -> int | None:
+    if "--version" in args or "--test-startup" in args or "--help" in args or "-h" in args:
         _attach_console()
     if "--version" in args:
         if sys.stdout is not None:
             sys.stdout.write(f"{Config.VERSION}\n")
             sys.stdout.flush()
         return 0
+    if "--help" in args or "-h" in args:
+        if sys.stdout is not None:
+            sys.stdout.write("usage: MediaDownloaderPRO [--version] [--test-startup] [--help]\n")
+            sys.stdout.flush()
+        return 0
     if "--test-startup" in args:
         return _test_startup()
+    return None
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
+    if (cli_code := _handle_cli(args)) is not None:
+        return cli_code
+    from src.core.crash_handler import install_crash_handler
+    from src.ui.main_window import MediaDownloaderUI
+
     app = _create_app()
     config = Config()
     logger = Logger(logDir=config.appDataDir / "logs")
     install_crash_handler(logger)
-    tray = TrayIcon()
+    tray = _mod_attr("TrayIcon")()
     tray.start()
-    deps = WindowDependencies(
+    deps = _mod_attr("WindowDependencies")(
         config=config, logger=logger,
         downloader=MediaDownloader(logger, config),
         updater=UpdateManager(Config.VERSION, Config.GITHUB_REPO, logger),

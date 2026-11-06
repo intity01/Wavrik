@@ -6,8 +6,6 @@ import threading
 from collections.abc import Callable
 from pathlib import Path
 
-import yt_dlp
-
 from src.core.parser import validateUrl
 
 from .audio_batch import download_all
@@ -40,6 +38,8 @@ class MediaDownloader:
             self._native.cancel()
 
     def inspect(self, url: str, cookie_file: str | None = None) -> dict:
+        import yt_dlp
+
         settings = YtDownloadSettings.from_config(self.config)
         cookie = settings.cookie_file if cookie_file is None else cookie_file
         options = metadataOptions(cookie, socket_timeout=settings.socket_timeout)

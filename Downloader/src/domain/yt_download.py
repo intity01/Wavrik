@@ -6,8 +6,6 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-import yt_dlp
-
 from .download_support import DownloadCancelled, log_error
 from .models import AttemptContext, DownloadPreset, DownloadResult, JobState
 from .utils import friendly_error
@@ -40,6 +38,8 @@ def download(
 def _attempt(
     self, url: str, attempt: int, max_attempts: int, ctx: AttemptContext,
 ) -> DownloadResult | None:
+    import yt_dlp
+
     try:
         with yt_dlp.YoutubeDL(ctx.options) as ydl:
             info = ydl.extract_info(url, download=True)

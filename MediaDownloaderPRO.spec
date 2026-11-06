@@ -37,7 +37,7 @@ a = Analysis(
         (str(root / "THIRD_PARTY_NOTICES.md"), "."),
         *collect_data_files("yt_dlp_ejs"),
     ],
-    hiddenimports=collect_submodules("yt_dlp_ejs"),
+    hiddenimports=["numpy", *collect_submodules("yt_dlp_ejs")],
     hookspath=[],
     excludes=["PyQt6.QtWebEngineWidgets", "tkinter"],
     noarchive=False,
