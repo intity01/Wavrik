@@ -71,7 +71,11 @@ class NativeDownloader:
         output_dir.mkdir(parents=True, exist_ok=True)
         stem = Path(unquote(urlsplit(url).path)).stem or "stream"
         target = target_path(output_dir, f"{stem}.{preset.container}", "", preset.container)
-        command = [executable, "-y", "-nostdin", "-rw_timeout", "15000000", "-i", url, "-map", "0", "-c", "copy", str(target)]
+        command = [
+            executable, "-y", "-nostdin",
+            "-protocol_whitelist", "http,https,tcp,tls,crypto",
+            "-rw_timeout", "15000000", "-i", url, "-map", "0", "-c", "copy", str(target),
+        ]
         try:
             if progress:
                 progress({"status": "downloading", "percent": 0.0, "speed": "FFmpeg", "eta": "—"})

@@ -58,37 +58,29 @@ class Config:
         self.settings = self._load_settings()
 
     def _getAppDataDir(self) -> Path:
-        if os.name == "nt":
-            base = Path(os.getenv("APPDATA", Path.home() / "AppData" / "Roaming"))
-        elif sys.platform == "darwin":
-            base = Path.home() / "Library" / "Application Support"
-        else:
-            base = Path.home() / ".config"
-        path = base / self.APP_NAME
-        path.mkdir(parents=True, exist_ok=True)
+        base = Path(os.getenv("APPDATA", Path.home() / "AppData" / "Roaming")) if os.name == "nt" else (
+            Path.home() / ("Library/Application Support" if sys.platform == "darwin" else ".config")
+        )
+        (path := base / self.APP_NAME).mkdir(parents=True, exist_ok=True)
         return path
 
     def _load_settings(self) -> dict[str, Any]:
         loaded = self._store.read({})
-        if not isinstance(loaded, dict):
+        if not isinstance(loaded, dict) or not _supported_schema(loaded.get("schemaVersion")):
             self._store.backup()
             return dict(DEFAULT_SETTINGS)
-        settings = {**DEFAULT_SETTINGS, **loaded}
-        if not _supported_schema(settings.get("schemaVersion")):
-            self._store.backup()
-            return dict(DEFAULT_SETTINGS)
-        settings["schemaVersion"] = DEFAULT_SETTINGS["schemaVersion"]
+        settings = {**DEFAULT_SETTINGS, **loaded, "schemaVersion": DEFAULT_SETTINGS["schemaVersion"]}
         settings["theme"] = settings.get("theme") if settings.get("theme") in _THEMES else DEFAULT_SETTINGS["theme"]
         settings["accentColor"] = DEFAULT_SETTINGS["accentColor"]
-        lang = settings.get("language")
-        settings["language"] = lang if lang in _LANGUAGES else DEFAULT_SETTINGS["language"]
-        settings["downloadPath"] = _valid_text(settings.get("downloadPath"), DEFAULT_SETTINGS["downloadPath"])
+        settings["language"] = settings.get("language") if settings.get("language") in _LANGUAGES else DEFAULT_SETTINGS["language"]
+        settings["downloadPath"] = _clean_path(settings.get("downloadPath"), DEFAULT_SETTINGS["downloadPath"])
         settings["defaultPreset"] = _valid_text(settings.get("defaultPreset"), DEFAULT_SETTINGS["defaultPreset"])
         settings["downloadEngine"] = settings.get("downloadEngine") if settings.get("downloadEngine") in {"auto", "native", "yt-dlp"} else "auto"
         settings["maxConcurrentDownloads"] = _bounded_int(settings.get("maxConcurrentDownloads"), 2, 1, 5)
         for key in ("clipboardMonitoring", "minimizeToTray", "firstRun", "checkUpdatesOnStartup", "downloadThumbnail", "rateLimitProtection"):
             settings[key] = _valid_bool(settings.get(key), DEFAULT_SETTINGS[key])
-        for key in ("cookieFile", "renamePattern", "thumbnailFormat", "thumbnailQuality"):
+        settings["cookieFile"] = _clean_path(settings.get("cookieFile"), DEFAULT_SETTINGS["cookieFile"])
+        for key in ("renamePattern", "thumbnailFormat", "thumbnailQuality"):
             settings[key] = _valid_text(settings.get(key), DEFAULT_SETTINGS[key])
         settings["sleepInterval"] = _bounded_int(settings.get("sleepInterval"), 1, 1, 10)
         settings["maxSleepInterval"] = _bounded_int(settings.get("maxSleepInterval"), 10, 10, 120)
@@ -105,16 +97,22 @@ class Config:
         return self.settings.get(key, default)
 
     def set(self, key: str, value: Any) -> None:
+        if key in {"downloadPath", "cookieFile"}:
+            value = DEFAULT_SETTINGS[key] if _is_unc(value) else str(value)
         self.settings[key] = value
 
     def update(self, **values: Any) -> None:
-        self.settings.update(values)
+        safe = {
+            k: (DEFAULT_SETTINGS[k] if _is_unc(v) else str(v)) if k in {"downloadPath", "cookieFile"} else v
+            for k, v in values.items()
+        }
+        self.settings.update(safe)
         self.saveSettings()
 
     def getDownloadPath(self, mediaType: str = "video") -> Path:
-        folder = "Audio" if mediaType == "audio" else "Videos"
-        path = Path(self.get("downloadPath")) / folder
-        path.mkdir(parents=True, exist_ok=True)
+        raw = self.get("downloadPath")
+        base = DEFAULT_SETTINGS["downloadPath"] if (_is_unc(raw) or not raw) else raw
+        (path := Path(base) / ("Audio" if mediaType == "audio" else "Videos")).mkdir(parents=True, exist_ok=True)
         return path
 
 
@@ -124,10 +122,9 @@ def _supported_schema(value: Any) -> bool:
 
 def _bounded_int(value: Any, default: int, minimum: int, maximum: int) -> int:
     try:
-        number = int(value)
+        return max(minimum, min(maximum, int(value)))
     except (TypeError, ValueError):
         return default
-    return max(minimum, min(maximum, number))
 
 
 def _valid_bool(value: Any, default: bool) -> bool:
@@ -136,4 +133,13 @@ def _valid_bool(value: Any, default: bool) -> bool:
 
 def _valid_text(value: Any, default: str) -> str:
     return value.strip() if isinstance(value, str) and value.strip() else default
+
+
+def _is_unc(value: Any) -> bool:
+    return bool(value) and str(value).strip().startswith(("\\\\", "//"))
+
+
+def _clean_path(value: Any, default: str) -> str:
+    text = _valid_text(str(value) if isinstance(value, Path) else value, default)
+    return default if _is_unc(text) else text
 

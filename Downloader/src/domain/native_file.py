@@ -23,7 +23,7 @@ def download_file(cancel, request_get, url: str, output_dir: Path, preset: Downl
             _validate_response(response)
             target = target_path(output_dir, url, response.headers.get("content-disposition", ""), preset.container)
             temporary = target.with_suffix(target.suffix + ".part")
-            total = int(response.headers.get("content-length") or 0)
+            total = _parse_content_length(response.headers.get("content-length"))
             _report(progress, "downloading", 0.0, "—", "—")
             _stream(cancel, response, temporary, total, progress)
             temporary.replace(target)
@@ -52,7 +52,23 @@ def _safe_error(exc: Exception) -> str:
     return str(exc) if isinstance(exc, NativeDownloadError) else friendly_error(str(exc))
 
 
-def _stream(cancel, response, temporary: Path, total: int, progress: Callable | None) -> None:
+def _parse_content_length(val: str | None) -> int:
+    try:
+        return max(0, int(val or 0))
+    except (ValueError, TypeError):
+        return 0
+
+
+MAX_FILE_BYTES = 10 * 1024 * 1024 * 1024  # 10 GB limit for native downloads
+
+
+def _stream(
+    cancel, response, temporary: Path, total: int,
+    progress: Callable | None, max_bytes: int | None = None,
+) -> None:
+    ceiling = MAX_FILE_BYTES if max_bytes is None else max_bytes
+    if total > ceiling:
+        raise NativeDownloadError("Download size exceeds maximum permitted limit (10 GB).")
     written = 0
     started = time.monotonic()
     with temporary.open("wb") as handle:
@@ -61,8 +77,10 @@ def _stream(cancel, response, temporary: Path, total: int, progress: Callable | 
                 raise _CancelledDownload()
             if not chunk:
                 continue
-            handle.write(chunk)
             written += len(chunk)
+            if written > ceiling:
+                raise NativeDownloadError("Download size exceeded maximum permitted limit (10 GB).")
+            handle.write(chunk)
             if progress:
                 elapsed = max(time.monotonic() - started, 0.01)
                 speed = written / elapsed
