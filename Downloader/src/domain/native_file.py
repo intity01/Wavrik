@@ -19,7 +19,8 @@ def download_file(cancel, request_get, url: str, output_dir: Path, preset: Downl
     output_dir.mkdir(parents=True, exist_ok=True)
     temporary = None
     try:
-        with request_get(url, stream=True, timeout=(10, 60), headers={"User-Agent": "MediaDownloaderPRO/2.1"}) as response:
+        with request_get(url, stream=True, timeout=(10, 60), headers={"User-Agent": "MediaDownloaderPRO/2.2"}) as response:
+
             _validate_response(response)
             target = target_path(output_dir, url, response.headers.get("content-disposition", ""), preset.container)
             temporary = target.with_suffix(target.suffix + ".part")

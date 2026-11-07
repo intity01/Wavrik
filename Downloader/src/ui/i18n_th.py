@@ -57,7 +57,9 @@ STRINGS_TH: dict[str, str] = {
     "at.play_original": "เล่นต้นฉบับ (A)", "at.preview_shifted": "ทดลองฟังผลลัพธ์ (B)", "at.stop": "หยุด",
     "at.export_shifted": "ส่งออกไฟล์ผลลัพธ์", "at.show_in_folder": "แสดงในโฟลเดอร์",
     "at.field_stem": "ระบบแยกแทร็กเสียง (Stems)", "at.separate_stems": "แยกแทร็กเสียง", "at.use_vocals": "ใช้แทร็กเสียงร้อง", "at.use_inst": "ใช้แทร็กดนตรี",
+    "at.ai_separator_required": "การแยกแทร็กด้วย AI ต้องติดตั้ง 'audio-separator' (รัน pip install audio-separator[gpu]) หรือเลือกใช้โหมด DSP แทน",
     "at.experimental_badge": "ผลประมาณการ", "at.file_not_exist": "ไม่พบไฟล์เสียงที่เลือก",
+
     "at.analyzing": "กำลังวิเคราะห์คีย์ คลื่นเสียง และ BPM…", "at.rendering": "กำลังปรับแต่งเสียงด้วย Rubber Band…",
     "at.separating": "กำลังแยกเสียงร้องและดนตรี…", "at.playback_stopped": "หยุดการเล่นแล้ว",
     "banner.clip_title": "ตรวจพบลำดับลิงก์ในคลิปบอร์ด", "banner.clip_add": "เพิ่มลงคิว", "banner.dismiss": "ปิดข้อความ",

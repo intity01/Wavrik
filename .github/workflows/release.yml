@@ -26,17 +26,29 @@ jobs:
             requirements-build.txt
             Downloader/requirements-dev.txt
 
-      - name: Verify FFmpeg input
+      - name: Download approved FFmpeg
         shell: pwsh
         run: |
-          if (-not (Test-Path "ffmpeg.exe")) {
-            throw "Place the approved ffmpeg.exe at the repository root before creating a release."
-          }
           $expectedHash = "228D7A8556258DE907FDB55F36850078EBC7680B84EC30D84EA02E99BEC1D1EB"
+          if (-not (Test-Path "ffmpeg.exe")) {
+            Write-Host "Downloading approved FFmpeg 8.1.1 essentials build..."
+            $ffmpegZip = "$env:TEMP\ffmpeg-8.1.1-essentials_build.zip"
+            $url = "https://github.com/GyanD/codexffmpeg/releases/download/8.1.1/ffmpeg-8.1.1-essentials_build.zip"
+            Invoke-WebRequest -Uri $url -OutFile $ffmpegZip -UseBasicParsing
+            $extracted = "$env:TEMP\ffmpeg_extracted"
+            Expand-Archive -Path $ffmpegZip -DestinationPath $extracted -Force
+            $bin = Get-ChildItem -Path $extracted -Filter "ffmpeg.exe" -Recurse | Select-Object -First 1
+            if (-not $bin) {
+              throw "ffmpeg.exe not found in downloaded archive."
+            }
+            Move-Item -Path $bin.FullName -Destination "ffmpeg.exe" -Force
+            Remove-Item -Path $ffmpegZip, $extracted -Recurse -Force -ErrorAction SilentlyContinue
+          }
           $actualHash = (Get-FileHash -Path "ffmpeg.exe" -Algorithm SHA256).Hash
           if ($actualHash -ne $expectedHash) {
             throw "ffmpeg.exe SHA-256 mismatch! Expected $expectedHash but got $actualHash"
           }
+          Write-Host "FFmpeg verified successfully: $actualHash"
 
       - name: Verify release configuration and notices
         shell: pwsh
@@ -70,10 +82,24 @@ jobs:
       - name: Build application
         run: pyinstaller --noconfirm --clean MediaDownloaderPRO.spec
 
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Inno Setup installer
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+          $installer = "dist/MediaDownloaderPRO-v2.2.0-Setup.exe"
+          if (-not (Test-Path $installer)) {
+            throw "Installer output not found at $installer"
+          }
+          (Get-FileHash $installer -Algorithm SHA256).Hash.ToLower() | Out-File "$installer.sha256" -Encoding ascii
+
       - name: Package Windows x64 build
         shell: pwsh
         run: |
-          $asset = "MediaDownloaderPRO-Windows-x64.zip"
+          $asset = "dist/MediaDownloaderPRO-v2.2.0-Windows-x64.zip"
           Compress-Archive -Path "dist/MediaDownloaderPRO/*" -DestinationPath $asset -Force
           (Get-FileHash $asset -Algorithm SHA256).Hash.ToLower() | Out-File "$asset.sha256" -Encoding ascii
 
@@ -84,8 +110,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${{ github.ref_name }}" `
-            "MediaDownloaderPRO-Windows-x64.zip" `
-            "MediaDownloaderPRO-Windows-x64.zip.sha256" `
+            "dist/MediaDownloaderPRO-v2.2.0-Windows-x64.zip" `
+            "dist/MediaDownloaderPRO-v2.2.0-Windows-x64.zip.sha256" `
+            "dist/MediaDownloaderPRO-v2.2.0-Setup.exe" `
+            "dist/MediaDownloaderPRO-v2.2.0-Setup.exe.sha256" `
             --title "Media Downloader PRO ${{ github.ref_name }}" `
             --generate-notes `
             --verify-tag `

@@ -45,10 +45,11 @@ _THEMES = {"light", "dark"}
 class Config:
     """Load, validate, and save user settings."""
 
-    VERSION = "2.1.0"
+    VERSION = "2.2.0"
     APP_NAME = "Wavrik"
     # Set to the public owner/repository slug as part of the release process.
     GITHUB_REPO = "intity01/Wavrik"
+
 
     def __init__(self, app_data_dir: Path | None = None):
         self.appDataDir = app_data_dir or self._getAppDataDir()

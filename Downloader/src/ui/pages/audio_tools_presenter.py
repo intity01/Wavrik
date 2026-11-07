@@ -4,37 +4,27 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel
-
 from src.services.audio_analysis import camelot_code, enharmonic_key, mirex_key_score, transpose_key
+
 from src.services.audio_camelot import get_harmonic_neighbors
 from src.services.audio_pitch import build_export_filename
-from src.services.audio_stems import STEM_MODES
+from src.services.audio_stems import is_separator_available
 from src.services.platform_actions import open_parent
-from src.ui.components.controls import ComboBox, PushButton, ToolButton
 from src.ui.i18n import tr
 from src.ui.theme.key_colors import apply_key_property
 from src.ui.workers.stem_worker import StemSeparationWorker, StemSignals
 
 
-def build_stem_rack(page) -> QFrame:
-    card = QFrame(objectName="AudioToolsCard")
-    row = QHBoxLayout(card)
-    row.setContentsMargins(12, 8, 12, 8)
-    page.stemModeCombo = ComboBox()
-    for label, key in STEM_MODES:
-        page.stemModeCombo.addItem(label, key)
-    page.separateStemsBtn = PushButton("Separate Stems")
-    page.loadVocalsBtn, page.loadInstBtn = ToolButton("Use Vocals"), ToolButton("Use Instrumental")
-    page.loadVocalsBtn.setEnabled(False)
-    page.loadInstBtn.setEnabled(False)
-    page.separateStemsBtn.clicked.connect(page._separate_stems)
-    page.loadVocalsBtn.clicked.connect(page._load_vocals_stem)
-    page.loadInstBtn.clicked.connect(page._load_inst_stem)
-    page.lblStem = QLabel("STEM SEPARATOR", objectName="FieldLabel")
-    for w, st in ((page.lblStem, 0), (page.stemModeCombo, 1), (page.separateStemsBtn, 0), (page.loadVocalsBtn, 0), (page.loadInstBtn, 0)):
-        row.addWidget(w, st)
-    return card
+def update_stem_guidance(page) -> None:
+    mode = str(page.stemModeCombo.currentData() or "roformer_ensemble")
+    if mode in {"roformer_ensemble", "roformer_fast"} and not is_separator_available():
+        msg = tr("at.ai_separator_required", getattr(page, "_lang", "en"))
+        if hasattr(page, "stemNoticeLabel"):
+            page.stemNoticeLabel.setText(msg)
+            page.stemNoticeLabel.show()
+    elif hasattr(page, "stemNoticeLabel"):
+        page.stemNoticeLabel.hide()
+
 
 
 def update_preview_labels(page) -> None:
@@ -93,14 +83,22 @@ def apply_analysis_result(page, result: dict) -> None:
 def start_stem_separation(page) -> None:
     if not page._source or page._busy:
         return
-    page._busy, page._stemSignals = True, StemSignals()
     mode = str(page.stemModeCombo.currentData() or "roformer_ensemble")
+    if mode in {"roformer_ensemble", "roformer_fast"} and not is_separator_available():
+        msg = tr("at.ai_separator_required", getattr(page, "_lang", "en"))
+        page.statusLabel.setText(msg)
+        if hasattr(page, "stemNoticeLabel"):
+            page.stemNoticeLabel.setText(msg)
+            page.stemNoticeLabel.show()
+        return
+    page._busy, page._stemSignals = True, StemSignals()
     page.statusLabel.setText(tr("at.separating", getattr(page, "_lang", "en")))
     page.separateStemsBtn.setEnabled(False)
     page._stemSignals.separated.connect(lambda v, i, m: on_stems_ready(page, v, i, m))
     page._stemSignals.error.connect(page._on_error)
     page._activeWorker = StemSeparationWorker(page._source, page._cfg.getDownloadPath("audio"), mode, page._stemSignals)
     page._pool.start(page._activeWorker)
+
 
 
 def on_stems_ready(page, vocals_str: str, inst_str: str, mode_used: str) -> None:

@@ -23,10 +23,19 @@ The bundled `ffmpeg.exe` reports itself as `8.1.1-essentials_build-www.gyan.dev`
 - `deno` redistributes the Deno runtime under the MIT license: https://github.com/denoland/deno_pypi
 - `requests` is Apache-2.0 licensed. Retain its required notices when redistributing it.
 
+## NumPy
+
+NumPy is used for audio signal processing, bit-perfect phase locking, and vectorized DSP loops under the BSD 3-Clause License:
+- Source and license: https://github.com/numpy/numpy/blob/main/LICENSE.txt
+
+## Packaging
+
+The `packaging` library is used for semver version comparison and update validation under the Apache License 2.0 and BSD 2-Clause License:
+- Source and license: https://github.com/pypa/packaging/blob/main/LICENSE
+
 ## Release checklist
 
 1. Distribute the application under GPL-3.0-or-later with [`LICENSE`](LICENSE) and complete corresponding source code.
 2. Include this notice and all required third-party license texts in the release package.
 3. Record the exact FFmpeg source, build configuration, checksum, and source-offer method.
-4. Include the license texts required by yt-dlp-ejs, Deno, and Requests in the release package.
-
+4. Include the license texts required by yt-dlp-ejs, Deno, Requests, NumPy, and Packaging in the release package.

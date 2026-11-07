@@ -5,12 +5,13 @@ from __future__ import annotations
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from src.services.audio_analysis import ALL_KEYS
+from src.services.audio_stems import STEM_MODES, is_separator_available
 from src.ui.components.controls import ComboBox, ElidedLabel, PrimaryPushButton, PushButton, SmoothScrollArea, ToolButton
 from src.ui.components.waveform_widget import WaveformWidget
 from src.ui.i18n import tr
 
 from .audio_tools_dsp import build_dsp_rack
-from .audio_tools_presenter import build_stem_rack
+
 
 
 def build_ui(page) -> None:
@@ -43,6 +44,37 @@ def _source_bar(page) -> QFrame:
     for w, st in ((page.lblSource, 0), (page.fileLabel, 1), (page.chooseFileBtn, 0), (page.batchBtn, 0)):
         row.addWidget(w, st)
     return card
+
+
+def build_stem_rack(page) -> QFrame:
+    card = QFrame(objectName="AudioToolsCard")
+    layout = QVBoxLayout(card)
+    layout.setContentsMargins(12, 8, 12, 8)
+    row = QHBoxLayout()
+    page.stemModeCombo = ComboBox()
+    for label, key in STEM_MODES:
+        page.stemModeCombo.addItem(label, key)
+    if not is_separator_available():
+        page.stemModeCombo.setCurrentIndex(2)
+    page.separateStemsBtn = PushButton("Separate Stems")
+    page.loadVocalsBtn, page.loadInstBtn = ToolButton("Use Vocals"), ToolButton("Use Instrumental")
+    page.loadVocalsBtn.setEnabled(False)
+    page.loadInstBtn.setEnabled(False)
+    page.separateStemsBtn.clicked.connect(page._separate_stems)
+    page.loadVocalsBtn.clicked.connect(page._load_vocals_stem)
+    page.loadInstBtn.clicked.connect(page._load_inst_stem)
+    page.lblStem = QLabel("STEM SEPARATOR", objectName="FieldLabel")
+    for w, st in ((page.lblStem, 0), (page.stemModeCombo, 1), (page.separateStemsBtn, 0), (page.loadVocalsBtn, 0), (page.loadInstBtn, 0)):
+        row.addWidget(w, st)
+    page.stemNoticeLabel = QLabel("", objectName="MutedText")
+    page.stemNoticeLabel.setWordWrap(True)
+    page.stemNoticeLabel.hide()
+    layout.addLayout(row)
+    layout.addWidget(page.stemNoticeLabel)
+    from .audio_tools_presenter import update_stem_guidance
+    page.stemModeCombo.currentIndexChanged.connect(lambda: update_stem_guidance(page))
+    return card
+
 
 
 def _inspector_rack(page) -> QFrame:

@@ -74,3 +74,6 @@ def _set_stem_language(page, lang: str) -> None:
         page.loadVocalsBtn.setText(tr("at.use_vocals", lang))
     if hasattr(page, "loadInstBtn"):
         page.loadInstBtn.setText(tr("at.use_inst", lang))
+    if hasattr(page, "stemNoticeLabel") and page.stemNoticeLabel.isVisible():
+        page.stemNoticeLabel.setText(tr("at.ai_separator_required", lang))
+

@@ -24,9 +24,11 @@ class StemResult:
     mode_used: str
 
 
-def separate_stems(
-    source: str | Path, output_dir: str | Path | None = None, mode: str = "roformer_ensemble", cancel_check: Any = None,
-) -> StemResult:
+def is_separator_available() -> bool:
+    return _find_separator_bin() is not None
+
+
+def separate_stems(source: str | Path, output_dir: str | Path | None = None, mode: str = "roformer_ensemble", cancel_check: Any = None) -> StemResult:
     src = Path(source).resolve()
     if not src.is_file():
         raise FileNotFoundError(f"Source audio not found: {src}")
@@ -38,25 +40,20 @@ def separate_stems(
         stage = Path(tmp)
         master_wav, sr, ch = _prepare_master_wav(src, stage / "master.wav", cancel_check)
         raw_inst, actual_mode = _extract_instrumental(master_wav, stage, mode, (sr, ch), cancel_check)
-        if is_cancellation_requested(cancel_check):
-            raise RuntimeError("Stem separation cancelled.")
-        tmp_v, tmp_i = stage / "v.wav", stage / "i.wav"
-        phase_lock_stems(master_wav, raw_inst, tmp_v, tmp_i, cancel_check)
-        os.replace(tmp_v, voc_dst)
-        os.replace(tmp_i, inst_dst)
+        phase_lock_stems(master_wav, raw_inst, stage / "v.wav", stage / "i.wav", cancel_check)
+
+        os.replace(stage / "v.wav", voc_dst)
+        os.replace(stage / "i.wav", inst_dst)
     return StemResult(vocals_path=voc_dst, instrumental_path=inst_dst, mode_used=actual_mode)
 
 
-def phase_lock_stems(
-    master_wav: Path, inst_est_wav: Path, voc_dst: Path, inst_dst: Path, cancel_check: Any = None,
-) -> None:
+def phase_lock_stems(master_wav: Path, inst_est_wav: Path, voc_dst: Path, inst_dst: Path, cancel_check: Any = None) -> None:
     if is_cancellation_requested(cancel_check):
         raise RuntimeError("Stem separation cancelled.")
     m_pcm, sr, ch = _read_pcm16(master_wav)
     i_pcm, _, _ = _read_pcm16(inst_est_wav)
     m_32, i_32 = m_pcm.astype(np.int32), np.zeros(len(m_pcm), dtype=np.int32)
-    n_inst = min(len(m_pcm), len(i_pcm))
-    i_32[:n_inst] = i_pcm[:n_inst]
+    i_32[: min(len(m_pcm), len(i_pcm))] = i_pcm[: min(len(m_pcm), len(i_pcm))]
     v = np.clip(m_32 - i_32, -32768, 32767)
     i_locked = np.clip(m_32 - v, -32768, 32767)
     if is_cancellation_requested(cancel_check):
@@ -74,10 +71,14 @@ def fuse_min_magnitude(inst_a: Path, inst_b: Path, out_wav: Path) -> Path:
 
 
 def _extract_instrumental(master_wav: Path, stage: Path, mode: str, sr_ch: tuple[int, int], cancel_check: Any = None) -> tuple[Path, str]:
-    if mode in {"roformer_ensemble", "roformer_fast"} and (sep := _find_separator_bin()) and "PYTEST_CURRENT_TEST" not in os.environ:
-        if (ai_inst := _try_roformer_cli(sep, master_wav, stage, mode, sr_ch, cancel_check)) and ai_inst.is_file():
+    if mode in {"roformer_ensemble", "roformer_fast"}:
+        sep = _find_separator_bin()
+        if not sep and "PYTEST_CURRENT_TEST" not in os.environ:
+            raise RuntimeError("AI stem separation requires audio-separator CLI. Install via 'pip install audio-separator[gpu]' or choose 'dsp_2stem'.")
+        if sep and "PYTEST_CURRENT_TEST" not in os.environ and (ai_inst := _try_roformer_cli(sep, master_wav, stage, mode, sr_ch, cancel_check)) and ai_inst.is_file():
             return ai_inst, mode
     return _extract_inst_dsp(master_wav, stage / "inst_dsp.wav", sr_ch, cancel_check), "dsp_2stem"
+
 
 
 def _try_roformer_cli(sep_bin: str, master_wav: Path, stage: Path, mode: str, sr_ch: tuple[int, int], cancel_check: Any = None) -> Path | None:
