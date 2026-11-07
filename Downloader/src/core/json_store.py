@@ -68,8 +68,8 @@ class JsonStore:
             backup = self.path.with_suffix(self.path.suffix + ".corrupt")
             if backup.exists():
                 try:
-                    ts = time.time_ns()
-                    os.replace(backup, self.path.with_name(f"{self.path.name}.{ts}.corrupt"))
+                    ts, uid = time.time_ns(), uuid.uuid4().hex[:6]
+                    os.replace(backup, self.path.with_name(f"{self.path.name}.{ts}_{uid}.corrupt"))
                 except OSError:
                     pass
             os.replace(self.path, backup)

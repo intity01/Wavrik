@@ -1,4 +1,5 @@
 -r ../requirements.txt
 pytest>=8.0
 pytest-qt>=4.4
-ruff>=0.6
+# Pinned: ruff 0.17 expands default rules and flags 76 false positives; keep <0.16.
+ruff>=0.15.21,<0.16
