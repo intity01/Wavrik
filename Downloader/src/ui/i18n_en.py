@@ -57,7 +57,9 @@ STRINGS_EN: dict[str, str] = {
     "at.play_original": "Play Original (A)", "at.preview_shifted": "Preview Shifted (B)", "at.stop": "Stop",
     "at.export_shifted": "Export Shifted Copy", "at.show_in_folder": "Show in folder",
     "at.field_stem": "STEM SEPARATOR", "at.separate_stems": "Separate Stems", "at.use_vocals": "Use Vocals", "at.use_inst": "Use Instrumental",
+    "at.ai_separator_required": "AI separation requires 'audio-separator'. Install via 'pip install audio-separator[gpu]' or choose Instant DSP.",
     "at.experimental_badge": "Experimental / Estimate", "at.file_not_exist": "Selected audio file does not exist.",
+
     "at.analyzing": "Analyzing Key, Waveform & BPM…", "at.rendering": "Rendering audio with Rubber Band…",
     "at.separating": "Separating Vocals & Instrumental (Phase-Locked)…", "at.playback_stopped": "Playback stopped.",
     "banner.clip_title": "Link detected in clipboard", "banner.clip_add": "Add", "banner.dismiss": "Dismiss",

@@ -45,6 +45,7 @@ call ".build-venv\Scripts\activate.bat"
 python -m pip install -r requirements-build.txt || exit /b 1
 
 echo [3/6] Running pre-build quality gates...
+set "PYTHONPATH=Downloader"
 python -m compileall -q Downloader\src Downloader\main.py || exit /b 1
 python Downloader\tools\check_rules.py || exit /b 1
 python Downloader\tools\check_ai_slop.py || exit /b 1
@@ -53,16 +54,39 @@ python -m pytest -q Downloader\tests || exit /b 1
 echo [4/6] Building standalone executable with PyInstaller...
 ".build-venv\Scripts\pyinstaller.exe" --noconfirm --clean MediaDownloaderPRO.spec || exit /b 1
 
-echo [5/6] Creating release archive and SHA-256 checksum...
-powershell -NoProfile -Command "$zip = 'dist\MediaDownloaderPRO-Windows-x64.zip'; $sha = 'dist\MediaDownloaderPRO-Windows-x64.zip.sha256'; Compress-Archive -Path 'dist\MediaDownloaderPRO\*' -DestinationPath $zip -Force; (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLower() | Out-File -FilePath $sha -Encoding ascii" || exit /b 1
+echo [5/6] Creating release archives and SHA-256 checksums...
+powershell -NoProfile -Command "$zip = 'dist\MediaDownloaderPRO-v2.2.0-Windows-x64.zip'; $sha = 'dist\MediaDownloaderPRO-v2.2.0-Windows-x64.zip.sha256'; Compress-Archive -Path 'dist\MediaDownloaderPRO\*' -DestinationPath $zip -Force; (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLower() | Out-File -FilePath $sha -Encoding ascii" || exit /b 1
+
+set "ISCC_EXE="
+where iscc >nul 2>nul
+if not errorlevel 1 set "ISCC_EXE=iscc"
+if not defined ISCC_EXE (
+    if exist "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" set "ISCC_EXE=C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+)
+if not defined ISCC_EXE (
+    if exist "C:\Program Files\Inno Setup 6\ISCC.exe" set "ISCC_EXE=C:\Program Files\Inno Setup 6\ISCC.exe"
+)
+if not defined ISCC_EXE (
+    if exist "%LocalAppData%\Programs\Inno Setup 6\ISCC.exe" set "ISCC_EXE=%LocalAppData%\Programs\Inno Setup 6\ISCC.exe"
+)
+if defined ISCC_EXE (
+    echo Compiling Inno Setup installer...
+    "%ISCC_EXE%" installer.iss || exit /b 1
+    powershell -NoProfile -Command "$inst = 'dist\MediaDownloaderPRO-v2.2.0-Setup.exe'; $sha = 'dist\MediaDownloaderPRO-v2.2.0-Setup.exe.sha256'; (Get-FileHash -Path $inst -Algorithm SHA256).Hash.ToLower() | Out-File -FilePath $sha -Encoding ascii" || exit /b 1
+)
 
 echo [6/6] Executing smoke test on standalone binary...
 "dist\MediaDownloaderPRO\MediaDownloaderPRO.exe" --test-startup || exit /b 1
 
 echo ========================================================
 echo Release build and automated verification successful!
-echo Binary:   dist\MediaDownloaderPRO\MediaDownloaderPRO.exe
-echo Package:  dist\MediaDownloaderPRO-Windows-x64.zip
-echo Checksum: dist\MediaDownloaderPRO-Windows-x64.zip.sha256
+echo Binary:    dist\MediaDownloaderPRO\MediaDownloaderPRO.exe
+echo Package:   dist\MediaDownloaderPRO-v2.2.0-Windows-x64.zip
+echo Checksum:  dist\MediaDownloaderPRO-v2.2.0-Windows-x64.zip.sha256
+if defined ISCC_EXE (
+    echo Installer: dist\MediaDownloaderPRO-v2.2.0-Setup.exe
+    echo Checksum:  dist\MediaDownloaderPRO-v2.2.0-Setup.exe.sha256
+)
 echo ========================================================
 endlocal
+
