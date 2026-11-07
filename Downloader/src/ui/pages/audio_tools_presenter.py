@@ -26,7 +26,6 @@ def update_stem_guidance(page) -> None:
         page.stemNoticeLabel.hide()
 
 
-
 def update_preview_labels(page) -> None:
     base_key, semitones = page.detectedKeyCombo.currentText() or "C major", page.semitoneSpin.value()
     shifted_key, enh, ratio = transpose_key(base_key, semitones), enharmonic_key(base_key), page._tempo_ratio()
@@ -98,7 +97,6 @@ def start_stem_separation(page) -> None:
     page._stemSignals.error.connect(page._on_error)
     page._activeWorker = StemSeparationWorker(page._source, page._cfg.getDownloadPath("audio"), mode, page._stemSignals)
     page._pool.start(page._activeWorker)
-
 
 
 def on_stems_ready(page, vocals_str: str, inst_str: str, mode_used: str) -> None:

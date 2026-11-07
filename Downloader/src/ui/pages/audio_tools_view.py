@@ -76,7 +76,6 @@ def build_stem_rack(page) -> QFrame:
     return card
 
 
-
 def _inspector_rack(page) -> QFrame:
     card = QFrame(objectName="AudioToolsCard")
     layout = QVBoxLayout(card)

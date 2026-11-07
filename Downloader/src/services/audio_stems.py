@@ -41,7 +41,6 @@ def separate_stems(source: str | Path, output_dir: str | Path | None = None, mod
         master_wav, sr, ch = _prepare_master_wav(src, stage / "master.wav", cancel_check)
         raw_inst, actual_mode = _extract_instrumental(master_wav, stage, mode, (sr, ch), cancel_check)
         phase_lock_stems(master_wav, raw_inst, stage / "v.wav", stage / "i.wav", cancel_check)
-
         os.replace(stage / "v.wav", voc_dst)
         os.replace(stage / "i.wav", inst_dst)
     return StemResult(vocals_path=voc_dst, instrumental_path=inst_dst, mode_used=actual_mode)
@@ -73,12 +72,11 @@ def fuse_min_magnitude(inst_a: Path, inst_b: Path, out_wav: Path) -> Path:
 def _extract_instrumental(master_wav: Path, stage: Path, mode: str, sr_ch: tuple[int, int], cancel_check: Any = None) -> tuple[Path, str]:
     if mode in {"roformer_ensemble", "roformer_fast"}:
         sep = _find_separator_bin()
-        if not sep and "PYTEST_CURRENT_TEST" not in os.environ:
+        if not sep:
             raise RuntimeError("AI stem separation requires audio-separator CLI. Install via 'pip install audio-separator[gpu]' or choose 'dsp_2stem'.")
         if sep and "PYTEST_CURRENT_TEST" not in os.environ and (ai_inst := _try_roformer_cli(sep, master_wav, stage, mode, sr_ch, cancel_check)) and ai_inst.is_file():
             return ai_inst, mode
     return _extract_inst_dsp(master_wav, stage / "inst_dsp.wav", sr_ch, cancel_check), "dsp_2stem"
-
 
 
 def _try_roformer_cli(sep_bin: str, master_wav: Path, stage: Path, mode: str, sr_ch: tuple[int, int], cancel_check: Any = None) -> Path | None:

@@ -6,9 +6,11 @@ import tomllib
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from src.core.config import Config
-
-from src.services.audio_stems import is_separator_available
+from src.domain.models import DownloadPreset, MediaType
+from src.domain.native_file import download_file
+from src.services.audio_stems import is_separator_available, separate_stems
 from src.ui.i18n import tr
 from src.ui.pages.audio_tools_presenter import start_stem_separation, update_stem_guidance
 
@@ -41,6 +43,7 @@ def test_installer_iss_specification():
     assert "SetupIconFile=Downloader\\src\\core\\app.ico" in iss_text
     assert 'Name: "{autoprograms}\\{#MyAppName}"' in iss_text
     assert 'Name: "{autodesktop}\\{#MyAppName}"' in iss_text
+    assert 'WorkingDir: "{app}"' in iss_text
     assert "UninstallDisplayIcon={app}\\{#MyAppExeName}" in iss_text
     assert "UninstallDisplayName={#MyAppName} v{#MyAppVersion}" in iss_text
 
@@ -71,6 +74,37 @@ def test_third_party_notices():
     assert "Apache" in notices_text or "BSD" in notices_text
 
 
+def test_native_file_user_agent_uses_config_version(tmp_path: Path):
+    captured_headers = {}
+
+    def mock_get(url, **kwargs):
+        captured_headers.update(kwargs.get("headers", {}))
+        raise RuntimeError("Stop after headers check")
+
+    preset = DownloadPreset(
+        key="test", label="Test", media_type=MediaType.AUDIO, container="mp3",
+    )
+    res = download_file(lambda: False, mock_get, "https://example.com/audio.mp3", tmp_path, preset, None)
+    assert not res.success
+    assert captured_headers.get("User-Agent") == f"MediaDownloaderPRO/{Config.VERSION}"
+
+
+def test_separator_availability_and_service_error(tmp_path: Path):
+    with patch("src.services.audio_stems._find_separator_bin", return_value=None):
+        assert is_separator_available() is False
+
+    with patch("src.services.audio_stems._find_separator_bin", return_value="C:\\dummy\\audio-separator.exe"):
+        assert is_separator_available() is True
+
+    # When audio-separator is missing, separate_stems must raise RuntimeError
+    dummy_wav = tmp_path / "song.wav"
+    dummy_wav.write_bytes(b"RIFF" + b"\x00" * 40)
+    with patch("src.services.audio_stems._find_separator_bin", return_value=None):
+        with patch("src.services.audio_stems._prepare_master_wav", return_value=(dummy_wav, 44100, 2)):
+            with pytest.raises(RuntimeError, match="AI stem separation requires audio-separator CLI"):
+                separate_stems(dummy_wav, tmp_path, mode="roformer_ensemble")
+
+
 def test_stem_separation_detection_and_guidance(qtbot):
     from PyQt6.QtWidgets import QLabel, QWidget
     from src.ui.components.controls import ComboBox, PushButton
@@ -88,7 +122,6 @@ def test_stem_separation_detection_and_guidance(qtbot):
 
     # When audio-separator is missing
     with patch("src.ui.pages.audio_tools_presenter.is_separator_available", return_value=False):
-        assert not is_separator_available() or True
         page.stemModeCombo.setCurrentIndex(0)  # roformer_ensemble
         update_stem_guidance(page)
         assert page.stemNoticeLabel.isVisible()

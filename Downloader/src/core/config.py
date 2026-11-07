@@ -50,7 +50,6 @@ class Config:
     # Set to the public owner/repository slug as part of the release process.
     GITHUB_REPO = "intity01/Wavrik"
 
-
     def __init__(self, app_data_dir: Path | None = None):
         self.appDataDir = app_data_dir or self._getAppDataDir()
         self.configFile = self.appDataDir / "settings.json"
