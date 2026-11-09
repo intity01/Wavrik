@@ -10,7 +10,7 @@ import pytest
 from src.core.config import Config
 from src.ui.components.crossfader_widget import CrossfaderWidget
 from src.ui.components.dj_deck_controls import DJDeckControls
-from src.ui.pages.audio_tools_dj import build_dj_rack, handle_dj_sync, wire_dj_events
+from src.ui.pages.audio_tools_dj import build_dj_rack, wire_dj_events
 from src.ui.pages.audio_tools_page import AudioToolsInterface
 from src.ui.pages.audio_tools_presenter import set_controls_enabled
 
