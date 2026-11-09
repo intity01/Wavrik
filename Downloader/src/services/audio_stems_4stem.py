@@ -66,10 +66,7 @@ def separate_4stems(source: str | Path, output_dir: str | Path | None = None, mo
     if is_cancellation_requested(cancel_check):
         raise RuntimeError("Stem separation cancelled.")
     (out_dir := Path(output_dir).resolve() if output_dir else src.parent).mkdir(parents=True, exist_ok=True)
-    dsts = (
-        unique_export_path(out_dir, f"{src.stem}_[Vocals].wav"), unique_export_path(out_dir, f"{src.stem}_[Drums].wav"),
-        unique_export_path(out_dir, f"{src.stem}_[Bass].wav"), unique_export_path(out_dir, f"{src.stem}_[Other].wav"),
-    )
+    dsts = tuple(unique_export_path(out_dir, f"{src.stem}_[{s}].wav") for s in ("Vocals", "Drums", "Bass", "Other"))
     with tempfile.TemporaryDirectory(prefix="wavrik-4stems-", dir=out_dir) as tmp:
         stage = Path(tmp)
         master_wav, sr, ch = _prepare_master_wav(src, stage / "master.wav", cancel_check)
@@ -82,6 +79,21 @@ def separate_4stems(source: str | Path, output_dir: str | Path | None = None, mo
 
 
 separate_stems_4stem = separate_4stems
+
+
+def synthesize_instrumental(master: Path, vocals: Path) -> Path | None:
+    if not (master.is_file() and vocals.is_file()):
+        return None
+    try:
+        out = unique_export_path(vocals.parent, f"{master.stem}_[Instrumental].wav")
+        m, sr, ch = _read_pcm16(master)
+        v = _read_pcm16(vocals)[0]
+        buf = np.zeros(len(m), dtype=np.int32)
+        buf[: min(len(m), len(v))] = v[: min(len(m), len(v))]
+        _write_pcm16(out, (m.astype(np.int32) - buf).clip(-32768, 32767).astype(np.int16), sr, ch)
+        return out
+    except Exception:
+        return None
 
 
 def _extract_4stems(master_wav: Path, stage: Path, mode: str, sr_ch: tuple[int, int], cancel_check: Any = None) -> tuple[tuple[Path, Path, Path, Path], str]:

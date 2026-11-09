@@ -13,12 +13,14 @@ from src.ui.components.audio_transport import AudioTransportController
 from src.ui.components.batch_audio_dialog import BatchAudioDialog
 from src.ui.dialogs import get_open_file_path, get_open_files
 from src.ui.i18n import tr
-from src.ui.workers.audio_worker import AnalyzeAudioWorker, AudioToolSignals, PitchJob, RenderPitchWorker
+from src.ui.workers.audio_worker import AnalyzeAudioWorker, AudioToolSignals
 
 from .audio_tools_presenter import (
     apply_analysis_result, build_export_name, compute_tempo_ratio,
-    open_export_folder, set_controls_enabled, start_stem_separation, update_preview_labels,
+    handle_pitch_rendered, open_export_folder, set_controls_enabled,
+    start_pitch_render, start_stem_separation, update_preview_labels,
 )
+from .audio_tools_stems import audition_stem, load_stem, reset_stem_controls
 from .audio_tools_view import build_ui
 
 _AUDIO_FILTER = "Audio files (*.wav *.mp3 *.flac *.m4a *.aac *.ogg *.opus);;All files (*.*)"
@@ -30,7 +32,8 @@ class AudioToolsInterface(QWidget):
 
     def __init__(self, config, historyManager=None, parent=None):
         super().__init__(parent)
-        self._cfg, self._hist, self._source, self._lastExport, self._vocalsStem, self._instStem = config, historyManager, None, None, None, None
+        self._cfg, self._hist, self._source, self._lastExport = config, historyManager, None, None
+        self._vocalsStem, self._drumsStem, self._bassStem, self._otherStem, self._instStem = None, None, None, None, None
         self._candidates, self._harmonic_cands, self._busy, self._pool = [], [], False, QThreadPool(self)
         self._pool.setMaxThreadCount(1)
         self.transport = AudioTransportController(self)
@@ -49,6 +52,8 @@ class AudioToolsInterface(QWidget):
         if not (cand := Path(path)).is_file():
             return self.statusLabel.setText(tr("at.file_not_exist", getattr(self, "_lang", "en")))
         self._source, self._busy = cand, False
+        self._vocalsStem, self._drumsStem, self._bassStem, self._otherStem, self._instStem = None, None, None, None, None
+        reset_stem_controls(self)
         self.transport.setSlotA(cand) or self.fileLabel.setText(f"{cand.name} ({cand.parent})")
         self._set_controls_enabled(True) or self._update_preview_labels()
         hit = cached if (cached and cached.get("key")) else (self._hist.getCachedAnalysis(cand) if (self._hist and hasattr(self._hist, "getCachedAnalysis")) else None)
@@ -83,13 +88,14 @@ class AudioToolsInterface(QWidget):
     def _on_source_bpm_changed(self, value: float) -> None:
         self.targetBpmSpin.setValue(value) or self._update_preview_labels()
     def _separate_stems(self) -> None: start_stem_separation(self)
-    def _load_vocals_stem(self) -> None: self._vocalsStem and self._vocalsStem.is_file() and self.loadFile(self._vocalsStem)
-    def _load_inst_stem(self) -> None: self._instStem and self._instStem.is_file() and self.loadFile(self._instStem)
+    def _load_stem(self, stem: str) -> None: load_stem(self, stem)
+    def _audition_stem(self, stem: str) -> None: audition_stem(self, stem)
+    def _load_vocals_stem(self) -> None: self._load_stem("vocals")
+    def _load_inst_stem(self) -> None: self._load_stem("inst")
     def _on_seek_requested(self, sec: float) -> None:
         self.statusLabel.setText(f"Playhead set to {int(sec // 60)}:{int(sec % 60):02d} (25s preview slice)")
         self.transport.playSlot(self.transport.activeSlot(), sec) if self.transport.isPlaying() else self.transport.seek(sec)
-    def _update_preview_labels(self, *_args) -> None:
-        update_preview_labels(self)
+    def _update_preview_labels(self, *_args) -> None: update_preview_labels(self)
     def _play_original(self) -> None:
         if self._source and self._source.is_file():
             self.transport.playSlot("A", self.waveformWidget.seekPosition())
@@ -103,27 +109,10 @@ class AudioToolsInterface(QWidget):
     def _export_shifted(self) -> None:
         if self._source and not self._busy:
             self._start_render(unique_export_path(self._cfg.getDownloadPath("audio"), self._export_name(fmt := str(self.formatCombo.currentData() or "wav"))), fmt, False)
-
     def _start_render(self, target: Path, fmt: str, is_preview: bool) -> None:
-        self._busy, self._signals = True, AudioToolSignals()
-        self.statusLabel.setText(tr("at.rendering", getattr(self, "_lang", "en"))) or self.exportBtn.setEnabled(False)
-        self._signals.rendered.connect(self._on_rendered)
-        self._signals.error.connect(self._on_error)
-        job = PitchJob(self._source, target, self.semitoneSpin.value(), str(self.engineCombo.currentData() or "r3_finer"), fmt, is_preview, self._tempo_ratio(), self.waveformWidget.seekPosition())
-        self._activeWorker = RenderPitchWorker(job, self._signals)
-        self._pool.start(self._activeWorker)
-
+        start_pitch_render(self, target, fmt, is_preview)
     def _on_rendered(self, path_str: str, is_preview: bool) -> None:
-        self._busy, out = False, Path(path_str)
-        self.exportBtn.setEnabled(True)
-        if is_preview:
-            self.transport.setSlotB(out) or self.transport.playSlot("B")
-            return self.statusLabel.setText(f"Playing Shifted Preview (B): {out.name}")
-        self._lastExport = out
-        self.openFolderBtn.show() or self.statusLabel.setText(f"Exported: {out.name}")
-        self._hist and out.is_file() and self._hist.addEntry("", out.stem, "audio", out.suffix.lstrip(".").upper(), str(out), True, out.stat().st_size, status="completed")
-        self.fileExported.emit(str(out))
-
+        handle_pitch_rendered(self, path_str, is_preview)
     def _on_error(self, message: str) -> None:
         self._busy = False
         self.separateStemsBtn.setEnabled(bool(self._source))

@@ -5,19 +5,17 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.services.audio_analysis import camelot_code, enharmonic_key, mirex_key_score, transpose_key
-
 from src.services.audio_camelot import get_harmonic_neighbors
 from src.services.audio_pitch import build_export_filename
 from src.services.audio_stems import is_separator_available
 from src.services.platform_actions import open_parent
 from src.ui.i18n import tr
 from src.ui.theme.key_colors import apply_key_property
-from src.ui.workers.stem_worker import StemSeparationWorker, StemSignals
 
 
 def update_stem_guidance(page) -> None:
-    mode = str(page.stemModeCombo.currentData() or "roformer_ensemble")
-    if mode in {"roformer_ensemble", "roformer_fast"} and not is_separator_available():
+    mode = str(page.stemModeCombo.currentData() or "htdemucs")
+    if mode in {"htdemucs", "htdemucs_ft", "roformer_ensemble", "roformer_fast"} and not is_separator_available():
         msg = tr("at.ai_separator_required", getattr(page, "_lang", "en"))
         if hasattr(page, "stemNoticeLabel"):
             page.stemNoticeLabel.setText(msg)
@@ -63,8 +61,7 @@ def format_analysis_status(key: str, bpm: float, result: dict) -> str:
 
 def apply_analysis_result(page, result: dict) -> None:
     key, bpm = str(result.get("key") or "C major"), float(result.get("bpm") or 120.0)
-    page._candidates = list(result.get("key_candidates") or [])
-    page._harmonic_cands = get_harmonic_neighbors(key)
+    page._candidates, page._harmonic_cands = list(result.get("key_candidates") or []), get_harmonic_neighbors(key)
     page.detectedKeyCombo.setCurrentText(key)
     page.bpmSpin.blockSignals(True)
     page.bpmSpin.setValue(bpm)
@@ -82,38 +79,45 @@ def apply_analysis_result(page, result: dict) -> None:
 def start_stem_separation(page) -> None:
     if not page._source or page._busy:
         return
-    mode = str(page.stemModeCombo.currentData() or "roformer_ensemble")
-    if mode in {"roformer_ensemble", "roformer_fast"} and not is_separator_available():
+    mode = str(page.stemModeCombo.currentData() or "htdemucs")
+    if mode in {"htdemucs", "htdemucs_ft", "roformer_ensemble", "roformer_fast"} and not is_separator_available():
         msg = tr("at.ai_separator_required", getattr(page, "_lang", "en"))
         page.statusLabel.setText(msg)
         if hasattr(page, "stemNoticeLabel"):
             page.stemNoticeLabel.setText(msg)
             page.stemNoticeLabel.show()
         return
-    page._busy, page._stemSignals = True, StemSignals()
-    page.statusLabel.setText(tr("at.separating", getattr(page, "_lang", "en")))
-    page.separateStemsBtn.setEnabled(False)
-    page._stemSignals.separated.connect(lambda v, i, m: on_stems_ready(page, v, i, m))
-    page._stemSignals.error.connect(page._on_error)
-    page._activeWorker = StemSeparationWorker(page._source, page._cfg.getDownloadPath("audio"), mode, page._stemSignals)
-    page._pool.start(page._activeWorker)
+    from .audio_tools_stems import dispatch_stem_separation
+    dispatch_stem_separation(page, mode)
 
 
 def on_stems_ready(page, vocals_str: str, inst_str: str, mode_used: str) -> None:
-    page._busy = False
-    voc, inst = Path(vocals_str), Path(inst_str)
-    page._vocalsStem, page._instStem = voc, inst
-    page.separateStemsBtn.setEnabled(True)
-    page.loadVocalsBtn.setEnabled(voc.is_file())
-    page.loadInstBtn.setEnabled(inst.is_file())
-    for stem_path in (voc, inst):
-        if page._hist and stem_path.is_file():
-            page._hist.addEntry("", stem_path.stem, "audio", "WAV", str(stem_path), True, stem_path.stat().st_size, status="completed")
-        if stem_path.is_file():
-            page.fileExported.emit(str(stem_path))
-    page._lastExport = voc if voc.is_file() else inst
-    page.openFolderBtn.show()
-    page.statusLabel.setText(f"Stems ready ({mode_used}): {voc.name} + {inst.name}")
+    from .audio_tools_stems import handle_2stems_ready
+    handle_2stems_ready(page, vocals_str, inst_str, mode_used)
+
+
+def start_pitch_render(page, target: Path, fmt: str, is_preview: bool) -> None:
+    from src.ui.workers.audio_worker import AudioToolSignals, PitchJob, RenderPitchWorker
+    page._busy, page._signals = True, AudioToolSignals()
+    page.statusLabel.setText(tr("at.rendering", getattr(page, "_lang", "en"))) or page.exportBtn.setEnabled(False)
+    page._signals.rendered.connect(page._on_rendered)
+    page._signals.error.connect(page._on_error)
+    job = PitchJob(page._source, target, page.semitoneSpin.value(), str(page.engineCombo.currentData() or "r3_finer"), fmt, is_preview, page._tempo_ratio(), page.waveformWidget.seekPosition())
+    page._activeWorker = RenderPitchWorker(job, page._signals)
+    page._pool.start(page._activeWorker)
+
+
+def handle_pitch_rendered(page, path_str: str, is_preview: bool) -> None:
+    page._busy, out = False, Path(path_str)
+    page.exportBtn.setEnabled(True)
+    if is_preview:
+        page.transport.setSlotB(out) or page.transport.playSlot("B")
+        page.statusLabel.setText(f"Playing Shifted Preview (B): {out.name}")
+        return
+    page._lastExport = out
+    page.openFolderBtn.show() or page.statusLabel.setText(f"Exported: {out.name}")
+    page._hist and out.is_file() and page._hist.addEntry("", out.stem, "audio", out.suffix.lstrip(".").upper(), str(out), True, out.stat().st_size, status="completed")
+    page.fileExported.emit(str(out))
 
 
 def set_controls_enabled(page, enabled: bool) -> None:
