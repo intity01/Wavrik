@@ -8,6 +8,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from src.core.config_helpers import (
+    _bounded_int,
+    _clean_path,
+    _is_unc,
+    _supported_schema,
+    _valid_bool,
+    _valid_text,
+)
 from .json_store import JsonStore
 
 
@@ -37,9 +45,13 @@ DEFAULT_SETTINGS = {
     "rateLimitProtection": True,
     "sleepInterval": 1,
     "maxSleepInterval": 10,
+    "cobaltEnabled": True,
+    "cobaltUrl": "https://api.cobalt.tools/",
+    "cobaltApiKey": "",
 }
 _LANGUAGES = {"th", "en"}
 _THEMES = {"light", "dark"}
+_ENGINES = {"auto", "cobalt", "native", "yt-dlp"}
 
 
 class Config:
@@ -75,12 +87,12 @@ class Config:
         settings["language"] = settings.get("language") if settings.get("language") in _LANGUAGES else DEFAULT_SETTINGS["language"]
         settings["downloadPath"] = _clean_path(settings.get("downloadPath"), DEFAULT_SETTINGS["downloadPath"])
         settings["defaultPreset"] = _valid_text(settings.get("defaultPreset"), DEFAULT_SETTINGS["defaultPreset"])
-        settings["downloadEngine"] = settings.get("downloadEngine") if settings.get("downloadEngine") in {"auto", "native", "yt-dlp"} else "auto"
+        settings["downloadEngine"] = settings.get("downloadEngine") if settings.get("downloadEngine") in _ENGINES else "auto"
         settings["maxConcurrentDownloads"] = _bounded_int(settings.get("maxConcurrentDownloads"), 2, 1, 5)
-        for key in ("clipboardMonitoring", "minimizeToTray", "firstRun", "checkUpdatesOnStartup", "downloadThumbnail", "rateLimitProtection"):
+        for key in ("clipboardMonitoring", "minimizeToTray", "firstRun", "checkUpdatesOnStartup", "downloadThumbnail", "rateLimitProtection", "cobaltEnabled"):
             settings[key] = _valid_bool(settings.get(key), DEFAULT_SETTINGS[key])
         settings["cookieFile"] = _clean_path(settings.get("cookieFile"), DEFAULT_SETTINGS["cookieFile"])
-        for key in ("renamePattern", "thumbnailFormat", "thumbnailQuality"):
+        for key in ("renamePattern", "thumbnailFormat", "thumbnailQuality", "cobaltUrl", "cobaltApiKey"):
             settings[key] = _valid_text(settings.get(key), DEFAULT_SETTINGS[key])
         settings["sleepInterval"] = _bounded_int(settings.get("sleepInterval"), 1, 1, 10)
         settings["maxSleepInterval"] = _bounded_int(settings.get("maxSleepInterval"), 10, 10, 120)
@@ -114,32 +126,3 @@ class Config:
         base = DEFAULT_SETTINGS["downloadPath"] if (_is_unc(raw) or not raw) else raw
         (path := Path(base) / ("Audio" if mediaType == "audio" else "Videos")).mkdir(parents=True, exist_ok=True)
         return path
-
-
-def _supported_schema(value: Any) -> bool:
-    return isinstance(value, int) and not isinstance(value, bool) and value in {1, 2}
-
-
-def _bounded_int(value: Any, default: int, minimum: int, maximum: int) -> int:
-    try:
-        return max(minimum, min(maximum, int(value)))
-    except (TypeError, ValueError):
-        return default
-
-
-def _valid_bool(value: Any, default: bool) -> bool:
-    return value if isinstance(value, bool) else default
-
-
-def _valid_text(value: Any, default: str) -> str:
-    return value.strip() if isinstance(value, str) and value.strip() else default
-
-
-def _is_unc(value: Any) -> bool:
-    return bool(value) and str(value).strip().startswith(("\\\\", "//"))
-
-
-def _clean_path(value: Any, default: str) -> str:
-    text = _valid_text(str(value) if isinstance(value, Path) else value, default)
-    return default if _is_unc(text) else text
-
