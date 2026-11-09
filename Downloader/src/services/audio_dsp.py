@@ -115,13 +115,6 @@ def _vec_interp(acf: np.ndarray, lags: np.ndarray, max_lag: int) -> np.ndarray:
     return np.where(valid, val, 0.0)
 
 
-def _interp(acf: list[float] | np.ndarray, lag_f: float, max_lag: int) -> float:
-    idx = int(lag_f)
-    if idx < 15 or idx >= max_lag:
-        return 0.0
-    frac = lag_f - idx
-    return float(acf[idx] * (1.0 - frac) + acf[idx + 1] * frac)
-
 
 def downsample_peaks(samples: Sequence[float] | np.ndarray, count: int = 80) -> list[float]:
     if count <= 0:
