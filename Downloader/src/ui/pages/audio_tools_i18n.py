@@ -4,17 +4,36 @@ from __future__ import annotations
 
 from src.ui.i18n import tr
 
+_STEM_BUTTON_I18N: tuple[tuple[str, str], ...] = (
+    ("loadVocalsBtn", "at.use_vocals"),
+    ("loadDrumsBtn", "at.use_drums"),
+    ("loadBassBtn", "at.use_bass"),
+    ("loadOtherBtn", "at.use_other"),
+    ("loadInstBtn", "at.use_inst"),
+    ("previewVocalsBtn", "at.preview_vocals"),
+    ("previewDrumsBtn", "at.preview_drums"),
+    ("previewBassBtn", "at.preview_bass"),
+    ("previewOtherBtn", "at.preview_other"),
+    ("previewInstBtn", "at.preview_inst"),
+    ("previewStemBtn", "at.preview_stem"),
+)
+
 
 def wire_tab_order(page) -> None:
     page.setTabOrder(page.chooseFileBtn, page.batchBtn)
     page.setTabOrder(page.batchBtn, page.reanalyzeBtn)
     page.setTabOrder(page.reanalyzeBtn, page.detectedKeyCombo)
+    last = page.detectedKeyCombo
     if hasattr(page, "stemModeCombo") and hasattr(page, "separateStemsBtn"):
-        page.setTabOrder(page.detectedKeyCombo, page.stemModeCombo)
+        page.setTabOrder(last, page.stemModeCombo)
         page.setTabOrder(page.stemModeCombo, page.separateStemsBtn)
-        page.setTabOrder(page.separateStemsBtn, page.semitoneSpin)
-    else:
-        page.setTabOrder(page.detectedKeyCombo, page.semitoneSpin)
+        last = page.separateStemsBtn
+        for name in ("loadVocalsBtn", "loadDrumsBtn", "loadBassBtn", "loadOtherBtn", "loadInstBtn", "previewStemBtn"):
+            if hasattr(page, name):
+                btn = getattr(page, name)
+                page.setTabOrder(last, btn)
+                last = btn
+    page.setTabOrder(last, page.semitoneSpin)
     page.setTabOrder(page.semitoneSpin, page.bpmSpin)
     page.setTabOrder(page.bpmSpin, page.targetBpmSpin)
     page.setTabOrder(page.targetBpmSpin, page.engineCombo)
@@ -65,15 +84,29 @@ def _set_dsp_language(page, lang: str) -> None:
     page.openFolderBtn.setText(tr("at.show_in_folder", lang))
 
 
+def _update_stem_combo(combo, lang: str) -> None:
+    for i in range(combo.count()):
+        key = combo.itemData(i)
+        if not key:
+            continue
+        for prefix in ("at.stem_mode_", "at.mode_"):
+            val = tr(f"{prefix}{key}", lang)
+            if val != f"{prefix}{key}":
+                combo.setItemText(i, val)
+                break
+
+
 def _set_stem_language(page, lang: str) -> None:
     if hasattr(page, "lblStem"):
         page.lblStem.setText(tr("at.field_stem", lang))
     if hasattr(page, "separateStemsBtn"):
         page.separateStemsBtn.setText(tr("at.separate_stems", lang))
-    if hasattr(page, "loadVocalsBtn"):
-        page.loadVocalsBtn.setText(tr("at.use_vocals", lang))
-    if hasattr(page, "loadInstBtn"):
-        page.loadInstBtn.setText(tr("at.use_inst", lang))
+    for attr, key in _STEM_BUTTON_I18N:
+        if hasattr(page, attr):
+            getattr(page, attr).setText(tr(key, lang))
+    if hasattr(page, "stemModeCombo"):
+        _update_stem_combo(page.stemModeCombo, lang)
     if hasattr(page, "stemNoticeLabel"):
         page.stemNoticeLabel.setText(tr("at.ai_separator_required", lang))
-
+    if hasattr(page, "auditionNoticeLabel"):
+        page.auditionNoticeLabel.setText(tr("at.audition_hint", lang))
