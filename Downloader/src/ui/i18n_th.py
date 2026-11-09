@@ -83,6 +83,7 @@ STRINGS_TH: dict[str, str] = {
     "set.queue": "การจัดคิวดาวน์โหลด", "set.queue_hint": "รูปแบบไฟล์ คุณภาพ และโฟลเดอร์ปลายทาง สามารถเลือกได้โดยตรงบนแถบเครื่องมือหน้าดาวน์โหลด",
     "set.concurrent_label": "จำนวนดาวน์โหลดพร้อมกัน",
     "set.cobalt_heading": "เครื่องมือดาวน์โหลด Cobalt", "set.cobalt_enable": "เปิดใช้งานการดึงสตรีม Cobalt", "set.cobalt_url": "URL ของเซิร์ฟเวอร์",
+    "set.turbo_heading": "การเร่งความเร็วดาวน์โหลด (Turbo)", "set.turbo_enable": "เปิดใช้งานการดาวน์โหลดแบบแยกส่วนความเร็วสูง (Turbo)", "set.turbo_threads": "จำนวนส่วนดาวน์โหลดขนานต่อไฟล์",
     "set.behavior": "การทำงานเบื้องหลัง",
     "set.clipboard_label": "ตรวจจับลิงก์จากคลิปบอร์ดอัตโนมัติ", "set.tray_label": "ทำงานต่อในถาดระบบเมื่อปิดหน้าต่าง",
     "set.logs_label": "ไฟล์บันทึกการทำงาน", "set.open_logs": "เปิดโฟลเดอร์บันทึก (Logs)",

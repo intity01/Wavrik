@@ -82,6 +82,27 @@ def build_cobalt_card(page) -> QFrame:
     return card
 
 
+def build_turbo_card(page) -> QFrame:
+    card, layout, page.turboHeading = settings_card("Download Acceleration (Turbo)")
+    page.turboToggle = ToggleButton("Multi-segment turbo acceleration")
+    page.turboToggle.setChecked(page._cfg.get("turboDownloadEnabled", True))
+    page.turboToggle.toggled.connect(lambda v: page._save("turboDownloadEnabled", bool(v)))
+    page.turboThreadsCombo = ComboBox()
+    page.turboThreadsCombo.setMaximumWidth(120)
+    for n in (2, 4, 8):
+        page.turboThreadsCombo.addItem(str(n), n)
+    cur = page._cfg.get("turboThreadCount", 4)
+    page.turboThreadsCombo.setCurrentIndex(max(0, page.turboThreadsCombo.findData(cur)))
+    page.turboThreadsCombo.currentIndexChanged.connect(
+        lambda: page._save("turboThreadCount", int(page.turboThreadsCombo.currentData() or 4))
+    )
+    row_en, page.lblTurboEn = settings_row("Multi-segment turbo acceleration", page.turboToggle)
+    row_th, page.lblTurboThreads = settings_row("Parallel segments per file", page.turboThreadsCombo)
+    layout.addLayout(row_en)
+    layout.addLayout(row_th)
+    return card
+
+
 def build_behavior_card(page) -> QFrame:
     card, layout, page.behHeading = settings_card("System Behavior")
     page.clipboardCheck = ToggleButton("Clipboard link suggestions")

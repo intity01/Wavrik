@@ -15,6 +15,7 @@ from .settings_view import (
     build_behavior_card,
     build_cobalt_card,
     build_queue_card,
+    build_turbo_card,
 )
 
 
@@ -43,9 +44,11 @@ class SettingsInterface(QWidget):
         self.subtitleLabel = QLabel(tr("set.subtitle", "en"), objectName="PageSubtitle")
         layout.addWidget(self.titleLabel)
         layout.addWidget(self.subtitleLabel)
+        self.turboCard = build_turbo_card(self)
         for card in (
             build_appearance_card(self),
             build_queue_card(self),
+            self.turboCard,
             build_cobalt_card(self),
             build_behavior_card(self),
         ):
@@ -61,7 +64,9 @@ class SettingsInterface(QWidget):
     def _wire_tab_order(self) -> None:
         self.setTabOrder(self.languageCombo, self.themeCombo)
         self.setTabOrder(self.themeCombo, self.concurrentSpin)
-        self.setTabOrder(self.concurrentSpin, self.cobaltCheck)
+        self.setTabOrder(self.concurrentSpin, self.turboToggle)
+        self.setTabOrder(self.turboToggle, self.turboThreadsCombo)
+        self.setTabOrder(self.turboThreadsCombo, self.cobaltCheck)
         self.setTabOrder(self.cobaltCheck, self.cobaltUrlInput)
         self.setTabOrder(self.cobaltUrlInput, self.clipboardCheck)
         self.setTabOrder(self.clipboardCheck, self.trayCheck)
@@ -85,6 +90,10 @@ class SettingsInterface(QWidget):
         self.queueHeading.setText(tr("set.queue", lang))
         self.queueHint.setText(tr("set.queue_hint", lang))
         self.lblConcurrent.setText(tr("set.concurrent_label", lang))
+        if hasattr(self, "turboHeading"):
+            self.turboHeading.setText(tr("set.turbo_heading", lang))
+            self.lblTurboEn.setText(tr("set.turbo_enable", lang))
+            self.lblTurboThreads.setText(tr("set.turbo_threads", lang))
         if hasattr(self, "cobaltHeading"):
             self.cobaltHeading.setText(tr("set.cobalt_heading", lang))
             self.lblCobaltEn.setText(tr("set.cobalt_enable", lang))

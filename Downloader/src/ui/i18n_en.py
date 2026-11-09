@@ -83,6 +83,7 @@ STRINGS_EN: dict[str, str] = {
     "set.queue": "Queue Concurrency", "set.queue_hint": "Format, quality, and save folder are configured directly on the Downloads toolbar.",
     "set.concurrent_label": "Simultaneous downloads",
     "set.cobalt_heading": "Cobalt Media Engine", "set.cobalt_enable": "Enable Cobalt stream extraction", "set.cobalt_url": "Instance URL",
+    "set.turbo_heading": "Download Acceleration (Turbo)", "set.turbo_enable": "Multi-segment turbo acceleration", "set.turbo_threads": "Parallel segments per file",
     "set.behavior": "System Behavior", "set.clipboard_label": "Clipboard link suggestions", "set.tray_label": "Continue in system tray",
     "set.logs_label": "Log files", "set.open_logs": "Open Log Folder",
     "set.software_updates": "Software updates", "set.installed_version": "Installed version: {version}",

@@ -48,6 +48,8 @@ DEFAULT_SETTINGS = {
     "cobaltEnabled": True,
     "cobaltUrl": "https://api.cobalt.tools/",
     "cobaltApiKey": "",
+    "turboDownloadEnabled": True,
+    "turboThreadCount": 4,
 }
 _LANGUAGES = {"th", "en"}
 _THEMES = {"light", "dark"}
@@ -89,13 +91,17 @@ class Config:
         settings["defaultPreset"] = _valid_text(settings.get("defaultPreset"), DEFAULT_SETTINGS["defaultPreset"])
         settings["downloadEngine"] = settings.get("downloadEngine") if settings.get("downloadEngine") in _ENGINES else "auto"
         settings["maxConcurrentDownloads"] = _bounded_int(settings.get("maxConcurrentDownloads"), 2, 1, 5)
-        for key in ("clipboardMonitoring", "minimizeToTray", "firstRun", "checkUpdatesOnStartup", "downloadThumbnail", "rateLimitProtection", "cobaltEnabled"):
+        for key in (
+            "clipboardMonitoring", "minimizeToTray", "firstRun", "checkUpdatesOnStartup",
+            "downloadThumbnail", "rateLimitProtection", "cobaltEnabled", "turboDownloadEnabled",
+        ):
             settings[key] = _valid_bool(settings.get(key), DEFAULT_SETTINGS[key])
         settings["cookieFile"] = _clean_path(settings.get("cookieFile"), DEFAULT_SETTINGS["cookieFile"])
         for key in ("renamePattern", "thumbnailFormat", "thumbnailQuality", "cobaltUrl", "cobaltApiKey"):
             settings[key] = _valid_text(settings.get(key), DEFAULT_SETTINGS[key])
         settings["sleepInterval"] = _bounded_int(settings.get("sleepInterval"), 1, 1, 10)
         settings["maxSleepInterval"] = _bounded_int(settings.get("maxSleepInterval"), 10, 10, 120)
+        settings["turboThreadCount"] = _bounded_int(settings.get("turboThreadCount"), 4, 1, 8)
         return settings
 
     def saveSettings(self) -> bool:
