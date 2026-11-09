@@ -1,4 +1,4 @@
-"""In-app studio audio transport controller with A/B slot switching."""
+"""In-app studio audio transport controller with A/B slot switching and stem audition."""
 
 from __future__ import annotations
 
@@ -13,15 +13,22 @@ except ImportError:  # pragma: no cover
     QMediaPlayer = None
 
 
+def _is_loaded(player: QMediaPlayer | None) -> bool:
+    if not player or not hasattr(QMediaPlayer, "MediaStatus"):
+        return False
+    return player.mediaStatus() in (QMediaPlayer.MediaStatus.LoadedMedia, QMediaPlayer.MediaStatus.BufferedMedia)
+
+
 class AudioTransportController(QObject):
     stateChanged = pyqtSignal(bool, str)
+    auditionChanged = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._slot_a: Path | None = None
         self._slot_b: Path | None = None
-        self._active_slot: str = "A"
-        self._playing: bool = False
+        self._active_slot, self._playing = "A", False
+        self._stem_name, self._audition_label = "", ""
         self._current_source: Path | None = None
         self._pending_seek_ms: int | None = None
         self._player = QMediaPlayer(self) if QMediaPlayer else None
@@ -34,20 +41,32 @@ class AudioTransportController(QObject):
 
     def setSlotA(self, path: str | Path | None) -> None:
         self._slot_a = Path(path) if path else None
-        self._slot_b = None
-        self._active_slot = "A"
-        self._current_source = None
-        self._pending_seek_ms = None
+        self._slot_b, self._stem_name, self._audition_label = None, "", ""
+        self._active_slot, self._current_source, self._pending_seek_ms = "A", None, None
         self.stop()
+        self.auditionChanged.emit("")
 
     def setSlotB(self, path: str | Path | None) -> None:
         old_b = self._slot_b
         self._slot_b = Path(path) if path else None
+        if path is None:
+            self._stem_name, self._audition_label = "", ""
+            self.auditionChanged.emit("")
         if self._current_source == old_b and path is None:
             self._current_source = None
             if self._active_slot == "B":
                 self.stop()
                 self._active_slot = "A"
+
+    def setStemPreview(self, path: str | Path | None, stem_name: str = "", auto_play: bool = False) -> None:
+        self.setSlotB(path)
+        name = str(stem_name).strip() if stem_name else (Path(path).stem if path else "")
+        self._stem_name = name if path else ""
+        self._audition_label = f"Auditioning {self._stem_name} (B)" if self._stem_name else ""
+        self.auditionChanged.emit(self._stem_name)
+        if path and (auto_play or (self._playing and self._active_slot == "B")):
+            pos = self.positionSec() if self._playing else None
+            self.playSlot("B", pos)
 
     def playSlot(self, slot: str = "A", start_sec: float | None = None) -> bool:
         target = self._slot_b if slot == "B" else self._slot_a
@@ -67,7 +86,7 @@ class AudioTransportController(QObject):
                     self._pending_seek_ms = pos_ms
                 self._player.stop()
                 self._player.setSource(QUrl.fromLocalFile(str(target)))
-                if self._pending_seek_ms is not None and self._is_loaded():
+                if self._pending_seek_ms is not None and _is_loaded(self._player):
                     self._player.setPosition(self._pending_seek_ms)
                     self._pending_seek_ms = None
                 self._player.play()
@@ -79,7 +98,7 @@ class AudioTransportController(QObject):
         pos_ms = max(0, int(sec * 1000))
         if not self._player:
             return
-        if self._current_source is not None and self._is_loaded():
+        if self._current_source is not None and _is_loaded(self._player):
             self._player.setPosition(pos_ms)
         else:
             self._pending_seek_ms = pos_ms
@@ -98,21 +117,17 @@ class AudioTransportController(QObject):
         self._playing = False
         self.stateChanged.emit(False, self._active_slot)
 
-    def isPlaying(self) -> bool:
-        return self._playing
-
-    def activeSlot(self) -> str:
-        return self._active_slot
-
-    def _is_loaded(self) -> bool:
-        if not self._player or not hasattr(QMediaPlayer, "MediaStatus"):
-            return False
-        return self._player.mediaStatus() in (QMediaPlayer.MediaStatus.LoadedMedia, QMediaPlayer.MediaStatus.BufferedMedia)
+    def isPlaying(self) -> bool: return self._playing
+    def activeSlot(self) -> str: return self._active_slot
+    def activeStem(self) -> str: return self._stem_name
+    def auditionLabel(self) -> str: return self._audition_label
+    def isAuditioning(self) -> bool: return bool(self._playing and self._active_slot == "B" and self._stem_name)
+    def positionSec(self) -> float:
+        return (self._player.position() / 1000.0) if (self._player and self._player.position() > 0) else 0.0
+    def _is_loaded(self) -> bool: return _is_loaded(self._player)
 
     def _on_media_status(self, status) -> None:
-        if not self._player or not hasattr(QMediaPlayer, "MediaStatus"):
-            return
-        if status in (QMediaPlayer.MediaStatus.LoadedMedia, QMediaPlayer.MediaStatus.BufferedMedia):
+        if self._player and hasattr(QMediaPlayer, "MediaStatus") and status in (QMediaPlayer.MediaStatus.LoadedMedia, QMediaPlayer.MediaStatus.BufferedMedia):
             if self._pending_seek_ms is not None:
                 self._player.setPosition(self._pending_seek_ms)
                 self._pending_seek_ms = None
