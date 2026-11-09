@@ -9,6 +9,8 @@ from pathlib import Path
 from src.core.parser import validateUrl
 
 from .audio_batch import download_all
+from .cobalt_client import CobaltClient
+from .cobalt_downloader import CobaltDownloader
 from .download_files import map_entries, metadata, resolve_output, resolve_thumbnail
 from .download_support import DownloadCancelled
 from .models import DownloadPreset, DownloadResult, JobState
@@ -55,15 +57,15 @@ class MediaDownloader:
 
     def getVideoInfo(self, url: str, cookieFile: str | None = None) -> dict | None:
         try:
-            result = self.inspect(url, cookieFile)
-            return result.get("metadata") if result.get("type") == "video" else None
+            res = self.inspect(url, cookieFile)
+            return res.get("metadata") if res.get("type") == "video" else None
         except Exception:  # noqa: BLE001 - provider failures become a safe UI result.
             return None
 
     def detectContentType(self, url: str) -> dict:
         try:
-            result = self.inspect(url)
-            return result if result["type"] == "playlist" else {"type": "video"}
+            res = self.inspect(url)
+            return res if res["type"] == "playlist" else {"type": "video"}
         except Exception:  # noqa: BLE001 - provider failures become a safe UI result.
             return {"type": "video"}
 
@@ -71,26 +73,36 @@ class MediaDownloader:
         self, url: str, output_dir: Path, preset: DownloadPreset,
         progress_callback: Callable | None = None, engine: str = "auto",
     ) -> DownloadResult:
-        selected = engine if engine in {"auto", "native", "yt-dlp"} else "auto"
+        selected = engine if engine in {"auto", "cobalt", "native", "yt-dlp"} else "auto"
         is_audio = getattr(preset.media_type, "value", preset.media_type) == "audio"
         if is_audio and preset.container == "all":
             return self._download_all_audio_formats(url, output_dir, preset, progress_callback, selected)
         if selected == "native" or (selected == "auto" and native_kind(url)):
             self._native = NativeDownloader(self._cancel, self.logger)
-            result = self._native.download(url, output_dir, preset, progress_callback)
-            if result.success:
-                self.lastDownloadedFile = result.file_path
-            if selected == "native" or result.success or result.state == JobState.CANCELLED:
-                return result
+            res = self._native.download(url, output_dir, preset, progress_callback)
+            if res.success:
+                self.lastDownloadedFile = res.file_path
+            if selected == "native" or res.success or res.state == JobState.CANCELLED:
+                return res
+        if selected == "cobalt" or (selected == "auto" and self.config and self.config.get("cobaltEnabled", True)):
+            res = self._cobalt_download(url, output_dir, preset, progress_callback)
+            if res.success:
+                self.lastDownloadedFile = res.file_path
+                return res
+            if selected == "cobalt" or res.state == JobState.CANCELLED:
+                return res
         return self._download_ytdlp(url, output_dir, preset, progress_callback)
+
+    def _cobalt_download(self, url: str, out_dir: Path, preset: DownloadPreset, cb: Callable | None) -> DownloadResult:
+        cfg = self.config or {}
+        client = CobaltClient(base_url=cfg.get("cobaltUrl", "https://api.cobalt.tools/"), api_key=cfg.get("cobaltApiKey", ""))
+        return CobaltDownloader(self._cancel, client, self.logger).download(url, out_dir, preset, cb)
 
     def _download_ytdlp(self, url, output_dir, preset, progress_callback=None) -> DownloadResult:
         return download_ytdlp(self, url, output_dir, preset, progress_callback)
 
-    def _download_all_audio_formats(
-        self, url, output_dir, preset, progress_callback=None, engine="auto",
-    ) -> DownloadResult:
-        return download_all(self, url, output_dir, progress_callback, engine)
+    def _download_all_audio_formats(self, url, out, preset, cb=None, engine="auto") -> DownloadResult:
+        return download_all(self, url, out, cb, engine)
 
     def _progress_hook(self, callback: Callable | None) -> Callable:
         def hook(data: dict) -> None:
@@ -102,7 +114,7 @@ class MediaDownloader:
         return hook
 
     def _postprocessor_hook(self) -> Callable:
-        def hook(data: dict) -> None:
+        def hook(_data: dict) -> None:
             if self._cancel.is_set():
                 raise DownloadCancelled()
 
@@ -112,10 +124,7 @@ class MediaDownloader:
     def _report_progress(callback: Callable, data: dict) -> None:
         status = data.get("status")
         if status == "downloading":
-            callback({
-                "status": "downloading", "percent": percent(data),
-                "speed": data.get("_speed_str") or "—", "eta": data.get("_eta_str") or "—",
-            })
+            callback({"status": "downloading", "percent": percent(data), "speed": data.get("_speed_str") or "—", "eta": data.get("_eta_str") or "—"})
         elif status == "finished":
             callback({"status": "processing", "percent": 100.0, "speed": "", "eta": ""})
 

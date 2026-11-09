@@ -89,6 +89,7 @@ def engine_combo() -> ComboBox:
     control.setAccessibleName("Download compatibility")
     for label, key in (
         ("Auto — recommended", "auto"),
+        ("Cobalt stream engine", "cobalt"),
         ("Built-in downloader", "native"),
         ("Compatibility downloader", "yt-dlp"),
     ):

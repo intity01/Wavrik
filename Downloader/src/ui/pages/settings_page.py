@@ -10,7 +10,12 @@ from src.ui.components.controls import SmoothScrollArea
 from src.ui.components.update_card import UpdateCard
 from src.ui.i18n import tr
 
-from .settings_view import build_appearance_card, build_behavior_card, build_queue_card
+from .settings_view import (
+    build_appearance_card,
+    build_behavior_card,
+    build_cobalt_card,
+    build_queue_card,
+)
 
 
 class SettingsInterface(QWidget):
@@ -38,18 +43,27 @@ class SettingsInterface(QWidget):
         self.subtitleLabel = QLabel(tr("set.subtitle", "en"), objectName="PageSubtitle")
         layout.addWidget(self.titleLabel)
         layout.addWidget(self.subtitleLabel)
-        layout.addWidget(build_appearance_card(self))
-        layout.addWidget(build_queue_card(self))
-        layout.addWidget(build_behavior_card(self))
+        for card in (
+            build_appearance_card(self),
+            build_queue_card(self),
+            build_cobalt_card(self),
+            build_behavior_card(self),
+        ):
+            layout.addWidget(card)
         self.updateCard = UpdateCard(self._updater, self._cfg)
         self.updateCard.updateAvailable.connect(self.updateAvailable.emit)
         layout.addWidget(self.updateCard)
         layout.addStretch(1)
         scroll.setWidget(content)
         root.addWidget(scroll)
+        self._wire_tab_order()
+
+    def _wire_tab_order(self) -> None:
         self.setTabOrder(self.languageCombo, self.themeCombo)
         self.setTabOrder(self.themeCombo, self.concurrentSpin)
-        self.setTabOrder(self.concurrentSpin, self.clipboardCheck)
+        self.setTabOrder(self.concurrentSpin, self.cobaltCheck)
+        self.setTabOrder(self.cobaltCheck, self.cobaltUrlInput)
+        self.setTabOrder(self.cobaltUrlInput, self.clipboardCheck)
         self.setTabOrder(self.clipboardCheck, self.trayCheck)
         self.setTabOrder(self.trayCheck, self.openLogsBtn)
         if hasattr(self.updateCard, "checkButton"):
@@ -71,6 +85,10 @@ class SettingsInterface(QWidget):
         self.queueHeading.setText(tr("set.queue", lang))
         self.queueHint.setText(tr("set.queue_hint", lang))
         self.lblConcurrent.setText(tr("set.concurrent_label", lang))
+        if hasattr(self, "cobaltHeading"):
+            self.cobaltHeading.setText(tr("set.cobalt_heading", lang))
+            self.lblCobaltEn.setText(tr("set.cobalt_enable", lang))
+            self.lblCobaltUrl.setText(tr("set.cobalt_url", lang))
         self.behHeading.setText(tr("set.behavior", lang))
         self.lblClipboard.setText(tr("set.clipboard_label", lang))
         self.lblTray.setText(tr("set.tray_label", lang))

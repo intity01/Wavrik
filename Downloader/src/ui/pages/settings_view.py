@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSpinBox, QVBoxLayout, QWidget
 
-from src.ui.components.controls import ComboBox, PushButton, ToggleButton
+from src.ui.components.controls import ComboBox, LineEdit, PushButton, ToggleButton
 from src.ui.i18n import tr
 
 
@@ -64,6 +64,21 @@ def build_queue_card(page) -> QFrame:
     layout.addWidget(page.queueHint)
     row_conc, page.lblConcurrent = settings_row("Simultaneous downloads", page.concurrentSpin)
     layout.addLayout(row_conc)
+    return card
+
+
+def build_cobalt_card(page) -> QFrame:
+    card, layout, page.cobaltHeading = settings_card("Cobalt Media Engine")
+    page.cobaltCheck = ToggleButton("Enable Cobalt stream extraction")
+    page.cobaltCheck.setChecked(page._cfg.get("cobaltEnabled", True))
+    page.cobaltCheck.toggled.connect(lambda v: page._save("cobaltEnabled", bool(v)))
+    page.cobaltUrlInput = LineEdit(page._cfg.get("cobaltUrl", "https://api.cobalt.tools/"))
+    page.cobaltUrlInput.setPlaceholderText("https://api.cobalt.tools/")
+    page.cobaltUrlInput.textChanged.connect(lambda v: page._save("cobaltUrl", v.strip()))
+    row_en, page.lblCobaltEn = settings_row("Enable Cobalt stream extraction", page.cobaltCheck)
+    row_url, page.lblCobaltUrl = settings_row("Instance URL", page.cobaltUrlInput)
+    layout.addLayout(row_en)
+    layout.addLayout(row_url)
     return card
 
 
