@@ -9,6 +9,7 @@ from pathlib import Path
 from src.core.config import Config
 from .models import DownloadPreset, DownloadResult, JobState
 from .native_paths import target_path
+from .turbo_stream import download_turbo_stream, probe_range_support
 from .utils import friendly_error
 
 
@@ -21,13 +22,18 @@ def download_file(cancel, request_get, url: str, output_dir: Path, preset: Downl
     temporary = None
     try:
         with request_get(url, stream=True, timeout=(10, 60), headers={"User-Agent": f"MediaDownloaderPRO/{Config.VERSION}"}) as response:
-
             _validate_response(response)
             target = target_path(output_dir, url, response.headers.get("content-disposition", ""), preset.container)
             temporary = target.with_suffix(target.suffix + ".part")
             total = _parse_content_length(response.headers.get("content-length"))
+            if total > MAX_FILE_BYTES:
+                raise NativeDownloadError("Download size exceeds maximum permitted limit (10 GB).")
             _report(progress, "downloading", 0.0, "—", "—")
-            _stream(cancel, response, temporary, total, progress)
+            turbo_ok = _try_turbo(cancel, request_get, url, temporary, total, progress) if total >= 2 * 1024 * 1024 else False
+            if cancel.is_set():
+                raise _CancelledDownload()
+            if not turbo_ok:
+                _stream(cancel, response, temporary, total, progress)
             temporary.replace(target)
             _report(progress, "processing", 100.0, "", "")
             return DownloadResult(True, JobState.COMPLETED, file_path=target, engine="native")
@@ -40,6 +46,19 @@ def download_file(cancel, request_get, url: str, output_dir: Path, preset: Downl
     finally:
         if temporary:
             temporary.unlink(missing_ok=True)
+
+
+def _try_turbo(cancel, request_get, url: str, temporary: Path, total: int, progress: Callable | None) -> bool:
+    try:
+        supported, probed = probe_range_support(request_get, url)
+        effective = probed or total
+        if supported and not cancel.is_set() and effective <= MAX_FILE_BYTES:
+            return download_turbo_stream(cancel, request_get, url, temporary, effective, progress)
+    except _CancelledDownload:
+        raise
+    except Exception:
+        pass
+    return False
 
 
 def _validate_response(response) -> None:
