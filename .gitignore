@@ -51,6 +51,8 @@ sndfile.dll
 settings.json
 history.json
 *.log
+loop-stack/
+.agents/
 
 # Operating system files
 .DS_Store
