@@ -1,11 +1,23 @@
-"""Interactive waveform visualizer with click-to-seek playhead and normalized bars."""
+"""Interactive waveform visualizer with spectrogram, beat grid, and seek playhead."""
 
 from __future__ import annotations
 
+import numpy as np
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
+from PyQt6.QtGui import QPainter
 from PyQt6.QtWidgets import QApplication, QWidget
 
+from src.services.audio_beat_grid import compute_beat_grid, get_adaptive_grid_markers
+from src.ui.components.waveform_renderers import (
+    draw_background,
+    draw_bars,
+    draw_beat_grid,
+    draw_empty_state,
+    draw_midpoint,
+    draw_playhead,
+    draw_spectrogram,
+    draw_time_markers,
+)
 from src.ui.theme.key_colors import key_hue
 from src.ui.theme.tokens import key_tint, palette
 
@@ -23,6 +35,8 @@ class WaveformWidget(QWidget):
         self._seek_sec: float = 0.0
         self._section_text: str = ""
         self._camelot: str = ""
+        self._spectrogram: np.ndarray | None = None
+        self._beat_grid: dict | None = None
 
     def setPeaks(self, peaks: list[float], duration_sec: float = 0.0, section_text: str = "") -> None:
         raw = [max(0.0, float(p)) for p in peaks]
@@ -32,6 +46,23 @@ class WaveformWidget(QWidget):
         self._seek_sec = min(self._seek_sec, max(0.0, self._duration_sec - 1.0)) if self._duration_sec > 0 else 0.0
         self._section_text = section_text
         self.update()
+
+    def setSpectrogram(self, spec: np.ndarray | None) -> None:
+        self._spectrogram = spec
+        self.update()
+
+    def setBeatGrid(self, grid: dict | None) -> None:
+        self._beat_grid = grid
+        self.update()
+
+    def setBpm(self, bpm: float) -> None:
+        if self._duration_sec > 0.0:
+            first_beat = float(self._beat_grid.get("first_beat_sec", 0.0)) if self._beat_grid else 0.0
+            self._beat_grid = compute_beat_grid(bpm, self._duration_sec, first_beat)
+            self.update()
+
+    def beatGrid(self) -> dict | None:
+        return self._beat_grid
 
     def setKeyCamelot(self, camelot: str) -> None:
         """Color the played part of the waveform with the hue of the track's Camelot key."""
@@ -47,6 +78,7 @@ class WaveformWidget(QWidget):
 
     def clear(self) -> None:
         self._peaks, self._duration_sec, self._seek_sec, self._section_text = [], 0.0, 0.0, ""
+        self._spectrogram, self._beat_grid = None, None
         self.update()
 
     def mousePressEvent(self, event) -> None:
@@ -60,16 +92,22 @@ class WaveformWidget(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h, tokens = self.width(), self.height(), _tokens()
-        _draw_background(painter, w, h, tokens)
-        if not self._peaks:
-            _draw_empty_state(painter, w, h, tokens)
+        draw_background(painter, w, h, tokens)
+        if not self._peaks and (self._spectrogram is None or self._spectrogram.size == 0):
+            draw_empty_state(painter, w, h, tokens)
             return
-        played = key_hue(self._camelot, tokens["accent"])
-        unplayed = key_tint(played, _theme()) if self._camelot else tokens["border_strong"]
-        _draw_bars(painter, (self._peaks, self._played_count(), played, unplayed), w, h)
-        _draw_midpoint(painter, w, h, (self._section_text, tokens))
-        _draw_playhead(painter, w, h, (self._seek_sec, self._duration_sec), tokens)
-        _draw_time_markers(painter, w, h, self._duration_sec, tokens)
+        if self._spectrogram is not None and self._spectrogram.size > 0:
+            draw_spectrogram(painter, self._spectrogram, w, h, tokens)
+        if self._beat_grid is not None and self._duration_sec > 0.0:
+            markers = get_adaptive_grid_markers(self._beat_grid, w - 16, self._duration_sec)
+            draw_beat_grid(painter, markers, self._duration_sec, w, h, tokens)
+        if self._peaks:
+            played = key_hue(self._camelot, tokens["accent"])
+            unplayed = key_tint(played, _theme()) if self._camelot else tokens["border_strong"]
+            draw_bars(painter, (self._peaks, self._played_count(), played, unplayed), w, h)
+        draw_midpoint(painter, w, h, (self._section_text, tokens))
+        draw_playhead(painter, w, h, (self._seek_sec, self._duration_sec), tokens)
+        draw_time_markers(painter, w, h, self._duration_sec, tokens)
 
     def _played_count(self) -> int:
         if self._duration_sec <= 0:
@@ -84,61 +122,3 @@ def _theme() -> str:
 
 def _tokens() -> dict[str, str]:
     return palette(_theme())
-
-
-def _draw_background(painter: QPainter, w: int, h: int, tokens: dict) -> None:
-    painter.fillRect(0, 0, w, h, QColor(tokens["surface"]))
-    painter.setPen(QPen(QColor(tokens["border"]), 1))
-    painter.drawRoundedRect(0, 0, w - 1, h - 1, 5, 5)
-
-
-def _draw_empty_state(painter: QPainter, w: int, h: int, tokens: dict) -> None:
-    painter.setPen(QColor(tokens["text_subtle"]))
-    painter.setFont(QFont("Segoe UI", 9))
-    painter.drawText(0, 0, w, h, Qt.AlignmentFlag.AlignCenter, "Waveform preview loads on analysis (Click to seek)")
-
-
-def _draw_bars(painter: QPainter, bars: tuple, w: int, h: int) -> None:
-    peaks, played_count, played_hue, unplayed_hue = bars
-    n = len(peaks)
-    bar_width = max(2.0, (w - 16) / max(1, n))
-    c1, c2 = QColor(played_hue), QColor(unplayed_hue)
-    for i, p in enumerate(peaks):
-        x = 8 + i * bar_width
-        bar_h = max(3.0, p * (h - 24))
-        y = (h / 2.0) - (bar_h / 2.0) + 2
-        painter.fillRect(int(x), int(y), max(1, int(bar_width - 1.5)), int(bar_h), c1 if i < played_count else c2)
-
-
-def _draw_midpoint(painter: QPainter, w: int, h: int, info: tuple) -> None:
-    label, tokens = info
-    mid = w // 2
-    painter.setPen(QPen(QColor(tokens["text_subtle"]), 1, Qt.PenStyle.DashLine))
-    painter.drawLine(mid, 4, mid, h - 4)
-    font = QFont("Segoe UI", 9, QFont.Weight.Bold)
-    painter.setFont(font)
-    painter.setPen(QColor(tokens["text_muted"]))
-    elided = QFontMetrics(font).elidedText(label or "1st Half | 2nd Half", Qt.TextElideMode.ElideRight, max(40, (w - mid) - 10))
-    painter.drawText(mid + 5, 13, elided)
-
-
-def _draw_playhead(painter: QPainter, w: int, h: int, timing: tuple, tokens: dict) -> None:
-    seek_sec, duration = timing
-    if duration <= 0:
-        return
-    px = int(8 + (seek_sec / duration) * max(1, w - 16))
-    painter.setPen(QPen(QColor(tokens["text"]), 2))
-    painter.drawLine(px, 2, px, h - 2)
-    mins, secs = int(seek_sec // 60), int(seek_sec % 60)
-    painter.setFont(QFont("Consolas", 9, QFont.Weight.Bold))
-    painter.drawText(min(w - 52, max(10, px + 4)), 13, f"@{mins}:{secs:02d}")
-
-
-def _draw_time_markers(painter: QPainter, w: int, h: int, duration: float, tokens: dict) -> None:
-    if duration <= 0:
-        return
-    painter.setFont(QFont("Consolas", 9))
-    painter.setPen(QColor(tokens["text_muted"]))
-    painter.drawText(8, h - 5, "0:00")
-    mins, secs = int(duration // 60), int(duration % 60)
-    painter.drawText(w - 36, h - 5, f"{mins}:{secs:02d}")
