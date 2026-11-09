@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from pathlib import Path
 import struct
 import zlib
 from typing import Sequence
@@ -87,3 +88,13 @@ def fingerprint_similarity (fp1: list[int], fp2: list[int]) -> float:
             if best_sim >= 0.9999:
                 return 1.0
     return round(float(best_sim), 4)
+
+
+def fingerprint_audio_file (file_path: str | Path, max_sec: int = 120) -> tuple[int, str]:
+    from src.services.audio_analysis import _decode_mono_samples
+    samples, sr = _decode_mono_samples(Path(file_path), max_sec)
+    if len(samples) == 0:
+        return 0, ""
+    dur = int(round(len(samples) / float(sr)))
+    fp = generate_chromaprint (samples, sr)
+    return dur, encode_fingerprint_base64 (fp)

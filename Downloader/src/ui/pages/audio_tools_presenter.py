@@ -120,7 +120,9 @@ def handle_pitch_rendered(page, path_str: str, is_preview: bool) -> None:
 
 
 def set_controls_enabled(page, enabled: bool) -> None:
-    for w in (page.reanalyzeBtn, page.separateStemsBtn, page.previewOrigBtn, page.previewShiftedBtn, page.stopAudioBtn, page.exportBtn, *page.candButtons, *page.camelotButtons):
+    btns = [page.reanalyzeBtn, page.separateStemsBtn, page.previewOrigBtn, page.previewShiftedBtn, page.stopAudioBtn, page.exportBtn, *page.candButtons, *page.camelotButtons]
+    hasattr(page, "tagBtn") and btns.append(page.tagBtn)
+    for w in btns:
         w.setEnabled(enabled)
     for a in ("djCrossfader", "djDeckA", "djDeckB"):
         hasattr(page, a) and getattr(page, a).setEnabled(enabled)

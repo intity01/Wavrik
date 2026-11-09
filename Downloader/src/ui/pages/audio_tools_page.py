@@ -66,6 +66,10 @@ class AudioToolsInterface(QWidget):
             self._batchDialog = BatchAudioDialog(files, self._cfg, self, {str(self._source): self.detectedKeyCombo.currentText()} if self._source else {})
             self._batchDialog.exec()
             self._batchDialog = None
+    def _open_tag_dialog(self) -> None:
+        if self._source and self._source.is_file():
+            from src.ui.components.audio_tag_dialog import AudioTagDialog
+            AudioTagDialog(self._source, self).exec()
 
     def _reanalyze(self) -> None:
         if self._source and not self._busy:

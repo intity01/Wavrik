@@ -103,6 +103,19 @@ def lookup_musicbrainz_recording(mbid: str, request_fn=None) -> dict[str, Any]:
         return {"status": "error", "error": str(exc)}
 
 
+def lookup_audio_file(file_path: str | Path, api_key: str = "8XaBELgH", request_fn=None) -> dict[str, Any]:
+    from src.services.audio_fingerprint import fingerprint_audio_file
+    dur, fp = fingerprint_audio_file(Path(file_path))
+    if not fp:
+        return {"status": "error", "error": "Could not fingerprint audio"}
+    res = lookup_acoustid(dur, fp, api_key=api_key, request_fn=request_fn)
+    if res.get("status") == "ok" and res.get("mbid"):
+        mb = lookup_musicbrainz_recording(res["mbid"], request_fn=request_fn)
+        if mb.get("status") == "ok":
+            res.update({k: v for k, v in mb.items() if v and k != "status"})
+    return res
+
+
 def parse_filename_heuristic(path_or_name: str) -> dict[str, str]:
     stem = Path(path_or_name).stem
     cleaned = re.sub(r"\[[^\]]*\]|\((?:official|audio|video|lyrics|hd)[^\)]*\)", "", stem, flags=re.IGNORECASE)

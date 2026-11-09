@@ -40,10 +40,12 @@ def _source_bar(page) -> QFrame:
     row.setContentsMargins(12, 8, 12, 8)
     page.fileLabel = ElidedLabel(tr("at.no_file", "en"), objectName="MutedText")
     page.chooseFileBtn, page.batchBtn = PushButton("Choose audio file"), PushButton("Batch Process...")
+    page.tagBtn = PushButton("Tag Metadata...")
     page.chooseFileBtn.clicked.connect(page._choose_file)
     page.batchBtn.clicked.connect(page._open_batch_dialog)
+    page.tagBtn.clicked.connect(page._open_tag_dialog)
     page.lblSource = QLabel("SOURCE", objectName="FieldLabel")
-    for w, st in ((page.lblSource, 0), (page.fileLabel, 1), (page.chooseFileBtn, 0), (page.batchBtn, 0)):
+    for w, st in ((page.lblSource, 0), (page.fileLabel, 1), (page.chooseFileBtn, 0), (page.batchBtn, 0), (page.tagBtn, 0)):
         row.addWidget(w, st)
     return card
 
