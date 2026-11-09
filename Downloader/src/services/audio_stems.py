@@ -88,7 +88,7 @@ def _try_roformer_cli(sep_bin: str, master_wav: Path, stage: Path, mode: str, sr
 
 def _run_sep_model(sep_bin: str, master_wav: Path, out_dir: Path, model: str, sr_ch: tuple[int, int], cancel_check: Any = None) -> Path | None:
     out_dir.mkdir(parents=True, exist_ok=True)
-    (m_dir := Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "MediaDownloaderPRO" / "models").mkdir(parents=True, exist_ok=True)
+    (m_dir := Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Wavrik" / "models").mkdir(parents=True, exist_ok=True)
     cmd = [sep_bin, str(master_wav), "-m", model, "--model_file_dir", str(m_dir), "--output_dir", str(out_dir), "--single_stem", "Instrumental", "--use_autocast"]
     proc = run_cancellable_process(cmd, timeout=900, cancel_check=cancel_check)
     cands = sorted(out_dir.glob("*Instrumental*.wav"))

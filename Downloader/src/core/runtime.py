@@ -64,3 +64,16 @@ def find_rubberband() -> str | None:
             return str(candidate)
     return shutil.which("rubberband")
 
+def find_node() -> str | None:
+    """Find local or bundled Node.js CLI executable for JS challenge solving."""
+    executable = "node.exe" if sys.platform == "win32" else "node"
+    candidates = [
+        application_root() / executable,
+        resource_root() / executable,
+        application_root() / "_internal" / executable,
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    return shutil.which("node")
+

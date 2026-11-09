@@ -33,6 +33,8 @@ def target_path(folder: Path, url: str, content_disposition: str, fallback_exten
     while candidate.exists() or candidate.with_suffix(candidate.suffix + ".part").exists():
         candidate = folder / f"{stem} ({count}).{ext}"
         count += 1
+    if not candidate.resolve().is_relative_to(folder.resolve()):
+        raise ValueError(f"Path traversal detected in destination: {filename}")
     return candidate
 
 

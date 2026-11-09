@@ -32,7 +32,7 @@ def apply_rate_limit_protection(options: dict, settings) -> None:
         "geo_bypass": True,
         "geo_bypass_country": None,
         "geo_bypass_ip_block": None,
-        "extractor_args": {"youtube": {"player_client": ["android", "web", "ios"], "player_skip": ["configs", "webpage"]}},
+        "extractor_args": {"youtube": {"player_client": ["android", "web", "web_embedded", "mweb", "ios"], "player_skip": ["configs", "webpage"]}},
         "http_headers": _headers(),
     })
 

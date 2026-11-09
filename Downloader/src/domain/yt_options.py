@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from src.core.runtime import find_deno, find_ffmpeg
+from src.core.runtime import find_deno, find_ffmpeg, find_node
 
 from .models import DownloadPreset
 from .yt_format import apply_preset_options, format_selector, template
@@ -130,3 +130,5 @@ def _apply_runtime_options(options: dict, settings: YtDownloadSettings) -> None:
 def _apply_js_runtime(options: dict) -> None:
     if deno_path := find_deno():
         options["js_runtimes"] = {"deno": {"path": deno_path}}
+    elif node_path := find_node():
+        options["js_runtimes"] = {"node": {"path": node_path}}
