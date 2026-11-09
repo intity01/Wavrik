@@ -112,6 +112,9 @@ def _base_options(
         "retry_sleep_functions": retry_delays(settings.sleep_interval, settings.max_sleep_interval),
         "skip_unavailable_fragments": False, "ignoreerrors": False,
         "nooverwrites": preset.container != "all",
+        "concurrent_fragment_downloads": 4,
+        "buffersize": 65536,
+        "http_chunk_size": 10485760,
     }
     if postprocessor_hook:
         options["postprocessor_hooks"] = [postprocessor_hook]

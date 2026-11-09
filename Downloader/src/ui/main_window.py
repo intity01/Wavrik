@@ -116,7 +116,8 @@ class MediaDownloaderUI(WindowLifecycleMixin, QMainWindow):
         applyTheme(self, self._cfg)
 
     def _schedule_update_check(self) -> None:
-        return
+        if self._cfg and self._cfg.get("checkUpdatesOnStartup", False) and hasattr(self.pageSettings, "triggerUpdateCheck"):
+            self.pageSettings.triggerUpdateCheck()
 
     def _update_available(self, info) -> None:
         self.pageWorkspace.showUpdateBanner(info, lambda: self.switchTo(self.pageSettings))

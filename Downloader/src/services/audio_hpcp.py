@@ -121,10 +121,10 @@ def _whiten_to_hpcp(spec: np.ndarray, peaks: list[tuple[float, float]], hpcp: li
         wm2 = ((10.0 ** ((w - 20.0 * freq / 4000.0) / 20.0)) ** 2) * (1.30 if freq < 220.0 else 1.0)
         for semi_shift, hw2 in _HARM_TABLE:
             pc = (12.0 * math.log2(freq * (2.0 ** (-semi_shift / 12.0)) / ref_hz)) % 12.0
-            for b0 in range(12):
-                d = min(abs(pc - b0), 12.0 - abs(pc - b0))
-                if d < 0.5:
-                    hpcp[b0] += math.cos(math.pi * d) * wm2 * hw2
+            r_pc = round(pc)
+            d = abs(pc - r_pc)
+            if d < 0.5:
+                hpcp[int(r_pc) % 12] += math.cos(math.pi * d) * wm2 * hw2
 
 
 def _correlate_bgate(pcp: list[float]) -> list[dict]:
