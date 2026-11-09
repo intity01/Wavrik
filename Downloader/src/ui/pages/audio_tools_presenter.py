@@ -122,6 +122,8 @@ def handle_pitch_rendered(page, path_str: str, is_preview: bool) -> None:
 def set_controls_enabled(page, enabled: bool) -> None:
     for w in (page.reanalyzeBtn, page.separateStemsBtn, page.previewOrigBtn, page.previewShiftedBtn, page.stopAudioBtn, page.exportBtn, *page.candButtons, *page.camelotButtons):
         w.setEnabled(enabled)
+    for a in ("djCrossfader", "djDeckA", "djDeckB"):
+        hasattr(page, a) and getattr(page, a).setEnabled(enabled)
 
 
 def compute_tempo_ratio(page) -> float:
@@ -136,3 +138,8 @@ def build_export_name(page, fmt: str) -> str:
 
 def open_export_folder(page) -> None:
     page._lastExport and page._lastExport.exists() and open_parent(page._lastExport)
+
+
+def handle_dj_sync(page, deck: str) -> None:
+    from .audio_tools_dj import handle_dj_sync as _sync
+    _sync(page, deck)

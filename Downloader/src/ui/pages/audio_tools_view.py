@@ -9,6 +9,7 @@ from src.ui.components.controls import ComboBox, ElidedLabel, PrimaryPushButton,
 from src.ui.components.waveform_widget import WaveformWidget
 from src.ui.i18n import tr
 
+from .audio_tools_dj import build_dj_rack, wire_dj_events
 from .audio_tools_dsp import build_dsp_rack
 from .audio_tools_stems import build_stem_rack
 
@@ -22,7 +23,9 @@ def build_ui(page) -> None:
     layout.setSpacing(14)
     page.titleLabel = QLabel("Audio Tools", objectName="PageTitle")
     page.subtitleLabel = QLabel(tr("at.subtitle", "en"), objectName="PageSubtitle", wordWrap=True)
-    for w in (page.titleLabel, page.subtitleLabel, _source_bar(page), _inspector_rack(page), build_stem_rack(page), build_dsp_rack(page), _audition_bar(page)):
+    dj_rack = build_dj_rack(page)
+    wire_dj_events(page)
+    for w in (page.titleLabel, page.subtitleLabel, _source_bar(page), _inspector_rack(page), build_stem_rack(page), build_dsp_rack(page), dj_rack, _audition_bar(page)):
         layout.addWidget(w)
     layout.addStretch(1)
     scroll.setWidget(content)
