@@ -121,7 +121,7 @@ class CobaltDownloader:
     def _write_stream(
         self, resp: requests.Response, temporary: Path, total: int, progress: Callable | None
     ) -> None:
-        written, started = 0, time.monotonic()
+        written, started, last_rep = 0, time.monotonic(), 0.0
         with temporary.open("wb") as handle:
             for chunk in resp.iter_content(256 * 1024):
                 if self._cancel.is_set():
@@ -130,9 +130,10 @@ class CobaltDownloader:
                     continue
                 written += len(chunk)
                 handle.write(chunk)
-                if progress:
-                    elapsed = max(time.monotonic() - started, 0.01)
-                    speed = written / elapsed
+                now = time.monotonic()
+                if progress and (now - last_rep >= 0.05 or written == total):
+                    last_rep = now
+                    speed = written / max(now - started, 0.01)
                     pct = (written * 100.0 / total) if total > 0 else 0.0
                     eta = max(total - written, 0) / speed if (speed > 0 and total > 0) else 0.0
                     _report(progress, "downloading", pct, _rate(speed), _time(eta) if total > 0 else "—")

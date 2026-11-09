@@ -74,6 +74,7 @@ class NativeDownloader:
         command = [
             executable, "-y", "-nostdin",
             "-protocol_whitelist", "http,https,tcp,tls,crypto",
+            "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
             "-rw_timeout", "15000000", "-i", url, "-map", "0", "-c", "copy", str(target),
         ]
         try:
