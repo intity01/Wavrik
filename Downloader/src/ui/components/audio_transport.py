@@ -22,15 +22,14 @@ def _is_loaded(player: QMediaPlayer | None) -> bool:
 class AudioTransportController(QObject):
     stateChanged = pyqtSignal(bool, str)
     auditionChanged = pyqtSignal(str)
+    positionChanged = pyqtSignal(float)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._slot_a: Path | None = None
-        self._slot_b: Path | None = None
+        self._slot_a, self._slot_b = None, None
         self._active_slot, self._playing = "A", False
         self._stem_name, self._audition_label = "", ""
-        self._current_source: Path | None = None
-        self._pending_seek_ms: int | None = None
+        self._current_source, self._pending_seek_ms = None, None
         self._player = QMediaPlayer(self) if QMediaPlayer else None
         self._output = QAudioOutput(self) if QAudioOutput else None
         if self._player and self._output:
@@ -38,25 +37,25 @@ class AudioTransportController(QObject):
             self._output.setVolume(0.9)
             self._player.playbackStateChanged.connect(self._on_playback_state)
             self._player.mediaStatusChanged.connect(self._on_media_status)
+            self._player.positionChanged.connect(self._on_position_changed)
 
     def setSlotA(self, path: str | Path | None) -> None:
-        self._slot_a = Path(path) if path else None
-        self._slot_b, self._stem_name, self._audition_label = None, "", ""
+        self._slot_a, self._slot_b = (Path(path) if path else None), None
+        self._stem_name, self._audition_label = "", ""
         self._active_slot, self._current_source, self._pending_seek_ms = "A", None, None
         self.stop()
         self.auditionChanged.emit("")
 
     def setSlotB(self, path: str | Path | None) -> None:
-        old_b = self._slot_b
-        self._slot_b = Path(path) if path else None
+        old_b, self._slot_b = self._slot_b, Path(path) if path else None
         if path is None:
             self._stem_name, self._audition_label = "", ""
             self.auditionChanged.emit("")
-        if self._current_source == old_b and path is None:
-            self._current_source = None
-            if self._active_slot == "B":
-                self.stop()
-                self._active_slot = "A"
+            if self._current_source == old_b:
+                self._current_source = None
+                if self._active_slot == "B":
+                    self.stop()
+                    self._active_slot = "A"
 
     def setStemPreview(self, path: str | Path | None, stem_name: str = "", auto_play: bool = False) -> None:
         self.setSlotB(path)
@@ -122,15 +121,16 @@ class AudioTransportController(QObject):
     def activeStem(self) -> str: return self._stem_name
     def auditionLabel(self) -> str: return self._audition_label
     def isAuditioning(self) -> bool: return bool(self._playing and self._active_slot == "B" and self._stem_name)
-    def positionSec(self) -> float:
-        return (self._player.position() / 1000.0) if (self._player and self._player.position() > 0) else 0.0
+    def positionSec(self) -> float: return (self._player.position() / 1000.0) if (self._player and self._player.position() > 0) else 0.0
     def _is_loaded(self) -> bool: return _is_loaded(self._player)
 
+    def _on_position_changed(self, pos_ms: int) -> None:
+        self.positionChanged.emit(max(0.0, pos_ms / 1000.0))
+
     def _on_media_status(self, status) -> None:
-        if self._player and hasattr(QMediaPlayer, "MediaStatus") and status in (QMediaPlayer.MediaStatus.LoadedMedia, QMediaPlayer.MediaStatus.BufferedMedia):
-            if self._pending_seek_ms is not None:
-                self._player.setPosition(self._pending_seek_ms)
-                self._pending_seek_ms = None
+        if self._player and hasattr(QMediaPlayer, "MediaStatus") and status in (QMediaPlayer.MediaStatus.LoadedMedia, QMediaPlayer.MediaStatus.BufferedMedia) and self._pending_seek_ms is not None:
+            self._player.setPosition(self._pending_seek_ms)
+            self._pending_seek_ms = None
 
     def _on_playback_state(self, state) -> None:
         if self._player and hasattr(QMediaPlayer, "PlaybackState") and state == QMediaPlayer.PlaybackState.StoppedState:

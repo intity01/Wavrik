@@ -39,6 +39,7 @@ class AudioToolsInterface(QWidget):
         self.transport = AudioTransportController(self)
         self.setAcceptDrops(True)
         build_ui(self)
+        self.transport.positionChanged.connect(self.waveformWidget.setSeekPosition)
         self._set_controls_enabled(False)
 
     def dragEnterEvent(self, event) -> None: event.acceptProposedAction() if event.mimeData().hasUrls() else event.ignore()
@@ -86,6 +87,7 @@ class AudioToolsInterface(QWidget):
     def _select_harmonic_neighbor(self, i: int) -> None:
         0 <= i < len(self._harmonic_cands) and self.semitoneSpin.setValue(self._harmonic_cands[i]["semitones"])
     def _on_source_bpm_changed(self, value: float) -> None:
+        self.waveformWidget.setBpm(value)
         self.targetBpmSpin.setValue(value) or self._update_preview_labels()
     def _separate_stems(self) -> None: start_stem_separation(self)
     def _load_stem(self, stem: str) -> None: load_stem(self, stem)

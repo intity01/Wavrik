@@ -14,14 +14,12 @@ from src.ui.theme.key_colors import apply_key_property
 
 
 def update_stem_guidance(page) -> None:
+    if not hasattr(page, "stemNoticeLabel"):
+        return
     mode = str(page.stemModeCombo.currentData() or "htdemucs")
-    if mode in {"htdemucs", "htdemucs_ft", "roformer_ensemble", "roformer_fast"} and not is_separator_available():
-        msg = tr("at.ai_separator_required", getattr(page, "_lang", "en"))
-        if hasattr(page, "stemNoticeLabel"):
-            page.stemNoticeLabel.setText(msg)
-            page.stemNoticeLabel.show()
-    elif hasattr(page, "stemNoticeLabel"):
-        page.stemNoticeLabel.hide()
+    needed = mode in {"htdemucs", "htdemucs_ft", "roformer_ensemble", "roformer_fast"} and not is_separator_available()
+    page.stemNoticeLabel.setText(tr("at.ai_separator_required", getattr(page, "_lang", "en"))) if needed else None
+    page.stemNoticeLabel.setVisible(needed)
 
 
 def update_preview_labels(page) -> None:
@@ -70,6 +68,9 @@ def apply_analysis_result(page, result: dict) -> None:
     page.badgeLabel.setText(str(result.get("badge") or "Experimental / Estimate"))
     page.sectionKeyLabel.setText(f"Section Key: {result.get('section_summary', '--')}")
     page.waveformWidget.setPeaks(result.get("peaks", []), result.get("duration_sec", 0.0), result.get("section_summary", ""))
+    page.waveformWidget.setBpm(bpm)
+    if result.get("spectrogram") is not None:
+        page.waveformWidget.setSpectrogram(result["spectrogram"])
     populate_candidate_buttons(page.candButtons, page._candidates, key)
     populate_harmonic_buttons(page.camelotButtons, page._harmonic_cands)
     update_preview_labels(page)
@@ -83,9 +84,7 @@ def start_stem_separation(page) -> None:
     if mode in {"htdemucs", "htdemucs_ft", "roformer_ensemble", "roformer_fast"} and not is_separator_available():
         msg = tr("at.ai_separator_required", getattr(page, "_lang", "en"))
         page.statusLabel.setText(msg)
-        if hasattr(page, "stemNoticeLabel"):
-            page.stemNoticeLabel.setText(msg)
-            page.stemNoticeLabel.show()
+        hasattr(page, "stemNoticeLabel") and (page.stemNoticeLabel.setText(msg) or page.stemNoticeLabel.show())
         return
     from .audio_tools_stems import dispatch_stem_separation
     dispatch_stem_separation(page, mode)
@@ -136,5 +135,4 @@ def build_export_name(page, fmt: str) -> str:
 
 
 def open_export_folder(page) -> None:
-    if page._lastExport and page._lastExport.exists():
-        open_parent(page._lastExport)
+    page._lastExport and page._lastExport.exists() and open_parent(page._lastExport)

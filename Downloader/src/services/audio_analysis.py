@@ -12,6 +12,7 @@ import numpy as np
 from src.core.runtime import find_ffmpeg
 from src.services.audio_dsp import downsample_peaks as _downsample_peaks, estimate_bpm as _estimate_bpm
 from src.services.audio_hpcp import extract_key_and_sections as _extract_key_and_sections
+from src.services.audio_spectrogram import compute_spectrogram as _compute_spectrogram
 
 NOTES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 ALL_KEYS = tuple([*(f"{n} major" for n in NOTES), *(f"{n} minor" for n in NOTES)])
@@ -30,18 +31,14 @@ def enharmonic_key(key_name: str) -> str:
     if len(parts) != 2:
         return key_name
     note = _norm_note(parts[0])
-    flat = _SHARP_TO_FLAT.get(note)
-    return f"{flat} {parts[1]}" if flat else f"{note} {parts[1]}"
+    return f"{_SHARP_TO_FLAT.get(note, note)} {parts[1]}"
 
 
 def camelot_code(key_name: str) -> str:
     parts = key_name.strip().split()
-    if len(parts) != 2:
+    if len(parts) != 2 or _norm_note(parts[0]) not in NOTES:
         return "--"
-    note = _norm_note(parts[0])
-    if note not in NOTES:
-        return "--"
-    return (_CAMELOT_MINOR if parts[1] == "minor" else _CAMELOT_MAJOR).get(note, "--")
+    return (_CAMELOT_MINOR if parts[1] == "minor" else _CAMELOT_MAJOR).get(_norm_note(parts[0]), "--")
 
 
 def transpose_key(key_name: str, semitones: int) -> str:
@@ -89,7 +86,7 @@ def mirex_bpm_score(predicted: float, reference: float) -> tuple[float, str]:
 def analyze_audio_file(path: str | Path, max_seconds: int = 180) -> dict:
     samples, sr = _decode_mono_samples(Path(path), max_seconds)
     if len(samples) < sr // 2 or (float(np.max(np.abs(samples))) if len(samples) else 0.0) < 1e-5:
-        return {"key": "C major", "camelot": "8B", "bpm": 120.0, "confidence": 0, "status": "unavailable", "key_candidates": []}
+        return {"key": "C major", "camelot": "8B", "bpm": 120.0, "confidence": 0, "status": "unavailable", "key_candidates": [], "spectrogram": None}
     bpm_slice = samples[10 * sr : 70 * sr] if len(samples) > 40 * sr else samples
     candidates, k1, k2 = _extract_key_and_sections(samples, sr)
     top_key, r1 = candidates[0]["key"], float(candidates[0]["correlation"])
@@ -114,6 +111,7 @@ def analyze_audio_file(path: str | Path, max_seconds: int = 180) -> dict:
         "badge": f"Experimental / Estimate · {conf}% ({sec_key} · {rel})",
         "key_candidates": candidates[:3],
         "peaks": _downsample_peaks(samples, 80),
+        "spectrogram": _compute_spectrogram(samples, sr),
         "duration_sec": round(len(samples) / float(sr), 1),
     }
 
