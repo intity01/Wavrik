@@ -18,7 +18,7 @@ py -3.12 -m venv .venv
 python -m pip install -r Downloader/requirements-dev.txt
 ```
 
-Put `ffmpeg.exe` (and optionally `rubberband.exe` + `sndfile.dll`) in the repository root, then run the app with `RunApp.bat` or `cd Downloader; python main.py`.
+Run `python Downloader/tools/fetch_build_deps.py` to download `ffmpeg.exe`, `rubberband.exe` and `sndfile.dll` into the repository root (SHA-256 pinned; `build_windows.bat` runs it automatically), then run the app with `RunApp.bat` or `cd Downloader; python main.py`.
 
 ## Quality gates
 

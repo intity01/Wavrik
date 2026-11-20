@@ -43,7 +43,7 @@
 
 ## เริ่มใช้งานจาก source บน Windows
 
-1. วาง `ffmpeg.exe` (และ `rubberband.exe` + `sndfile.dll` สำหรับ R3 Engine) ไว้ข้าง `RunApp.bat`
+1. รัน `python Downloader/tools/fetch_build_deps.py` เพื่อโหลด `ffmpeg.exe`, `rubberband.exe` และ `sndfile.dll` (สำหรับ R3 Engine) มาไว้ข้าง `RunApp.bat` สคริปต์ตรวจ SHA-256 ให้ และ `build_windows.bat` เรียกสคริปต์นี้ให้อัตโนมัติ
 2. ดับเบิลคลิก `RunApp.bat`
 3. ครั้งแรกสคริปต์จะสร้าง `.venv` และติดตั้ง dependency อัตโนมัติ
 
