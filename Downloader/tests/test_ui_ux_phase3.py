@@ -1,4 +1,4 @@
-"""Comprehensive verification of UI/UX redesign per DESIGN.md."""
+"""Comprehensive verification of UI/UX redesign per docs/DESIGN.md."""
 
 from __future__ import annotations
 

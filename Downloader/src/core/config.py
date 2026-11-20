@@ -59,7 +59,7 @@ _ENGINES = {"auto", "cobalt", "native", "yt-dlp"}
 class Config:
     """Load, validate, and save user settings."""
 
-    VERSION = "2.2.0"
+    VERSION = "2.3.0"
     APP_NAME = "Wavrik"
     # Set to the public owner/repository slug as part of the release process.
     GITHUB_REPO = "intity01/Wavrik"
@@ -69,6 +69,7 @@ class Config:
         self.configFile = self.appDataDir / "settings.json"
         self.historyFile = self.appDataDir / "history.json"
         self._store = JsonStore(self.configFile)
+        self._changes: dict[str, Any] = {}
         self.settings = self._load_settings()
 
     def _getAppDataDir(self) -> Path:
@@ -79,7 +80,10 @@ class Config:
         return path
 
     def _load_settings(self) -> dict[str, Any]:
-        loaded = self._store.read({})
+        loaded = self._store.read(None)
+        if loaded is None:
+            # Missing, already-quarantined, or temporarily unreadable: never rename a file we could not parse.
+            return dict(DEFAULT_SETTINGS)
         if not isinstance(loaded, dict) or not _supported_schema(loaded.get("schemaVersion")):
             self._store.backup()
             return dict(DEFAULT_SETTINGS)
@@ -104,7 +108,15 @@ class Config:
         settings["turboThreadCount"] = _bounded_int(settings.get("turboThreadCount"), 4, 1, 8)
         return settings
 
+    def _recover_unreadable_file(self) -> None:
+        """Re-read a settings file that was locked at start-up and re-apply this session's edits."""
+        loaded = self._load_settings()
+        if not self._store.unreadable:
+            self.settings = {**loaded, **self._changes}
+
     def saveSettings(self) -> bool:
+        if self._store.unreadable:
+            self._recover_unreadable_file()
         try:
             self._store.write(self.settings)
             return True
@@ -117,7 +129,7 @@ class Config:
     def set(self, key: str, value: Any) -> None:
         if key in {"downloadPath", "cookieFile"}:
             value = DEFAULT_SETTINGS[key] if _is_unc(value) else str(value)
-        self.settings[key] = value
+        self.settings[key] = self._changes[key] = value
 
     def update(self, **values: Any) -> None:
         safe = {
@@ -125,6 +137,7 @@ class Config:
             for k, v in values.items()
         }
         self.settings.update(safe)
+        self._changes.update(safe)
         self.saveSettings()
 
     def getDownloadPath(self, mediaType: str = "video") -> Path:

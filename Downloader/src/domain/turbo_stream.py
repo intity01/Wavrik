@@ -3,19 +3,21 @@
 from __future__ import annotations
 
 import concurrent.futures
+import threading
 from collections.abc import Callable
 from contextlib import nullcontext
-from dataclasses import dataclass
 from pathlib import Path
-import threading
-import time
 
+from .turbo_segment import ChunkSegment, RangeNotHonored, SegmentFileWriter, download_segment
+from .turbo_segment import ProgressThrottle as _ProgressThrottle
+from .turbo_settings import settings_of
 
-@dataclass
-class ChunkSegment:
-    start: int
-    end: int
-    downloaded: int = 0
+_download_segment = download_segment
+
+__all__ = [
+    "ChunkSegment", "RangeNotHonored", "SegmentFileWriter", "_ProgressThrottle", "_download_segment",
+    "calculate_chunk_boundaries", "download_turbo_stream", "probe_range_support",
+]
 
 
 def probe_range_support(request_get, url: str) -> tuple[bool, int]:
@@ -51,94 +53,48 @@ def calculate_chunk_boundaries(
     return segments
 
 
-class SegmentFileWriter:
-    def __init__(self, path: Path):
-        self._handle = path.open("r+b")
-        self._lock = threading.Lock()
+class _LinkedCancel:
+    """User cancellation plus a failure flag shared by every segment of one download."""
 
-    def write_at(self, offset: int, data: bytes) -> None:
-        with self._lock:
-            self._handle.seek(offset)
-            self._handle.write(data)
+    def __init__(self, cancel) -> None:
+        self._cancel = cancel
+        self._failed = threading.Event()
 
-    def close(self) -> None:
-        with self._lock:
-            if not self._handle.closed:
-                self._handle.flush()
-                self._handle.close()
+    def is_set(self) -> bool:
+        return self._cancel.is_set() or self._failed.is_set()
 
-    def __enter__(self):
-        return self
+    def wait(self, timeout: float | None = None) -> bool:
+        return self._cancel.wait(timeout)
 
-    def __exit__(self, *_args):
-        self.close()
+    def fail(self) -> None:
+        self._failed.set()
 
 
-class _ProgressThrottle:
-    def __init__(self, total: int, progress: Callable | None):
-        self._total, self._progress, self._written = total, progress, 0
-        self._started, self._last, self._lock = time.monotonic(), 0.0, threading.Lock()
-
-    def update(self, delta: int) -> None:
-        if not self._progress:
-            return
-        with self._lock:
-            self._written += delta
-            now = time.monotonic()
-            if now - self._last < 0.05 and self._written < self._total:
-                return
-            self._last = now
-            elapsed = max(now - self._started, 0.01)
-            spd = self._written / elapsed
-            eta = max(self._total - self._written, 0) / spd if spd else 0.0
-            s_txt = f"{spd / 1048576:.1f} MB/s" if spd >= 1048576 else f"{spd / 1024:.0f} KB/s"
-            t_txt = f"{int(eta) // 60:02d}:{int(eta) % 60:02d}" if self._total else "—"
-            self._progress({
-                "status": "downloading",
-                "percent": (self._written * 100.0 / self._total) if self._total else 0.0,
-                "speed": s_txt,
-                "eta": t_txt,
-            })
-
-
-def _download_segment(cancel, request_get, url: str, seg: ChunkSegment, writer: SegmentFileWriter, throttle: _ProgressThrottle) -> None:
-    retries, seg_len = 0, seg.end - seg.start + 1
-    while seg.downloaded < seg_len and not cancel.is_set():
-        headers = {"Range": f"bytes={seg.start + seg.downloaded}-{seg.end}"}
-        try:
-            resp = request_get(url, stream=True, timeout=(10, 30), headers=headers)
-            with resp if hasattr(resp, "__enter__") else nullcontext(resp):
-                if getattr(resp, "status_code", 0) not in (200, 206):
-                    raise RuntimeError(f"HTTP {getattr(resp, 'status_code', 0)}")
-                for chunk in resp.iter_content(64 * 1024):
-                    if cancel.is_set():
-                        return
-                    if chunk:
-                        writer.write_at(seg.start + seg.downloaded, chunk)
-                        seg.downloaded += len(chunk)
-                        throttle.update(len(chunk))
-        except Exception:
-            retries += 1
-            if retries > 3 or cancel.is_set():
-                raise
-            cancel.wait(0.2 * retries)
+def _run_segment(stop: _LinkedCancel, request_get, url: str, seg: ChunkSegment, writer, throttle) -> None:
+    try:
+        download_segment(stop, request_get, url, seg, writer, throttle)
+    except BaseException:
+        stop.fail()
+        raise
 
 
 def download_turbo_stream(
     cancel, request_get, url: str, target_part: Path, total_size: int, progress: Callable | None = None
 ) -> bool:
-    if total_size <= 0:
+    """Download `url` into `target_part` using the thread count set on `request_get`."""
+    settings = settings_of(request_get)
+    if not settings.enabled or total_size <= 0:
+        return False
+    segments = calculate_chunk_boundaries(total_size, max_threads=settings.threads)
+    if not segments:
         return False
     target_part.parent.mkdir(parents=True, exist_ok=True)
     with target_part.open("wb") as handle:
         handle.truncate(total_size)
-    segments = calculate_chunk_boundaries(total_size)
-    if not segments:
-        return False
-    throttle = _ProgressThrottle(total_size, progress)
+    stop, throttle = _LinkedCancel(cancel), _ProgressThrottle(total_size, progress)
     with SegmentFileWriter(target_part) as writer:
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(segments)) as pool:
-            futs = [pool.submit(_download_segment, cancel, request_get, url, s, writer, throttle) for s in segments]
+            futs = [pool.submit(_run_segment, stop, request_get, url, s, writer, throttle) for s in segments]
             for fut in concurrent.futures.as_completed(futs):
                 fut.result()
     return not cancel.is_set() and sum(s.downloaded for s in segments) == total_size

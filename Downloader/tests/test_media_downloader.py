@@ -316,6 +316,11 @@ def test_download_all_audio_formats_cleanup_partial_files(tmp_path):
     (tmp_path / "test.m4a.temp").write_bytes(b"temp")
     (tmp_path / "test.opus.ytdl").write_bytes(b"ytdl")
     
+    # Abandoned partials are old; a recently touched one could belong to a running job.
+    old = time.time() - 3600
+    for name in ("test.mp3.part", "test.m4a.temp", "test.opus.ytdl"):
+        os.utime(tmp_path / name, (old, old))
+
     # Verify they exist
     assert (tmp_path / "test.mp3.part").exists()
     assert (tmp_path / "test.m4a.temp").exists()

@@ -16,6 +16,7 @@ from .settings_view import (
     build_cobalt_card,
     build_queue_card,
     build_turbo_card,
+    save_cobalt_url,
 )
 
 
@@ -98,6 +99,7 @@ class SettingsInterface(QWidget):
             self.cobaltHeading.setText(tr("set.cobalt_heading", lang))
             self.lblCobaltEn.setText(tr("set.cobalt_enable", lang))
             self.lblCobaltUrl.setText(tr("set.cobalt_url", lang))
+            save_cobalt_url(self, self.cobaltUrlInput.text(), persist=False, lang=lang)
         self.behHeading.setText(tr("set.behavior", lang))
         self.lblClipboard.setText(tr("set.clipboard_label", lang))
         self.lblTray.setText(tr("set.tray_label", lang))

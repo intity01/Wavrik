@@ -11,6 +11,7 @@ import numpy as np
 
 from src.core.process import is_cancellation_requested, run_cancellable_process
 from src.services.audio_pitch import unique_export_path
+from src.services.audio_stems_dsp import run_dsp_filter as _run_dsp_filter
 from src.services.audio_stems import (
     _ffmpeg_exe, _find_separator_bin, _normalize_wav_spec, _prepare_master_wav, _read_pcm16, _write_pcm16,
 )
@@ -129,10 +130,8 @@ def _extract_4stem_dsp(master_wav: Path, stage: Path, sr_ch: tuple[int, int], ca
     voc, drum, bass, other = stage / "v_dsp.wav", stage / "d_dsp.wav", stage / "b_dsp.wav", stage / "o_dsp.wav"
     if (ffmpeg := _ffmpeg_exe()):
         af_voc = "pan=stereo|c0=0.5*c0+0.5*c1|c1=0.5*c0+0.5*c1,highpass=f=300,lowpass=f=3400" if sr_ch[1] >= 2 else "highpass=f=300,lowpass=f=3400"
-        _run_dsp_filter(ffmpeg, master_wav, voc, af_voc, sr_ch, cancel_check)
-        _run_dsp_filter(ffmpeg, master_wav, bass, "lowpass=f=200", sr_ch, cancel_check)
-        _run_dsp_filter(ffmpeg, master_wav, drum, "highpass=f=3500", sr_ch, cancel_check)
-        if voc.is_file() and bass.is_file() and drum.is_file():
+        filters = ((voc, af_voc), (bass, "lowpass=f=200"), (drum, "highpass=f=3500"))
+        if all(_run_dsp_filter(ffmpeg, master_wav, dst, af, sr_ch, cancel_check) for dst, af in filters):
             return voc, drum, bass, other
     pcm, sr, ch = _read_pcm16(master_wav)
     _write_pcm16(voc, (pcm.astype(np.float32) * 0.35).astype(np.int16), sr, ch)
@@ -140,7 +139,3 @@ def _extract_4stem_dsp(master_wav: Path, stage: Path, sr_ch: tuple[int, int], ca
     _write_pcm16(bass, (pcm.astype(np.float32) * 0.20).astype(np.int16), sr, ch)
     return voc, drum, bass, other
 
-
-def _run_dsp_filter(ffmpeg: str, src: Path, dst: Path, af: str, sr_ch: tuple[int, int], cancel_check: Any = None) -> None:
-    cmd = [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(src), "-af", af, "-ar", str(sr_ch[0]), "-ac", str(sr_ch[1]), "-c:a", "pcm_s16le", str(dst)]
-    run_cancellable_process(cmd, timeout=180, cancel_check=cancel_check)

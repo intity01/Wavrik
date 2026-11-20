@@ -69,18 +69,21 @@ class LibraryInterface(QWidget):
             self._analysisPool.start(worker)
 
     def _cleanup_bg_job(self, sig: AudioToolSignals, worker: AnalyzeAudioWorker) -> None:
-        sig in self._bgSignals and self._bgSignals.remove(sig)
-        worker in self._activeWorkers and self._activeWorkers.remove(worker)
+        if sig in self._bgSignals:
+            self._bgSignals.remove(sig)
+        if worker in self._activeWorkers:
+            self._activeWorkers.remove(worker)
 
     def storeAnalysisResult(self, result: dict) -> None:
-        if not (fp := str(result.get("filePath") or "")):
+        if not (fp := str(result.get("filePath") or "")) or result.get("status") == "unavailable":
             return
         self._analysisCache.pop(fp, None)
         while len(self._analysisCache) >= 200:
             self._analysisCache.pop(next(iter(self._analysisCache)), None)
         self._analysisCache[fp] = result
         getattr(self._hist, "updateAnalysis", lambda *_: None)(fp, result)
-        fp in self._cardsByPath and self._cardsByPath[fp].setAnalysisResult(result)
+        if fp in self._cardsByPath:
+            self._cardsByPath[fp].setAnalysisResult(result)
 
     def cleanup(self) -> None:
         for worker in list(self._activeWorkers):
@@ -127,9 +130,11 @@ class LibraryInterface(QWidget):
     def _clear_cards(self) -> None:
         self._cardsByPath.clear()
         while self.listLay.count() > 1:
-            (w := self.listLay.takeAt(0).widget()) and w.deleteLater()
+            if (widget := self.listLay.takeAt(0).widget()) is not None:
+                widget.deleteLater()
 
     def _clear(self) -> None:
         t, m, b = tr("lib.clear_confirm_title", self._lang), tr("lib.clear_confirm_msg", self._lang), tr("lib.btn_clear", self._lang)
         if MessageBox(t, m, self, b).exec():
-            self._hist.clearHistory() or self._apply_search()
+            self._hist.clearHistory()
+            self._apply_search()

@@ -120,7 +120,7 @@ def test_acoustid_response_parser_mock():
         ],
     }
     mock_fn = MagicMock(return_value=mock_payload)
-    res = lookup_acoustid(180, "AQAA...", request_fn=mock_fn)
+    res = lookup_acoustid(180, "AQAA...", api_key="test-key", request_fn=mock_fn)
     assert res["status"] == "ok"
     assert res["title"] == "Bohemian Rhapsody"
     assert res["artist"] == "Queen"
@@ -131,18 +131,18 @@ def test_acoustid_response_parser_mock():
 
 def test_acoustid_response_not_found_and_error():
     mock_empty = {"status": "ok", "results": []}
-    res_empty = lookup_acoustid(60, "fp", request_fn=MagicMock(return_value=mock_empty))
+    res_empty = lookup_acoustid(60, "fp", api_key="test-key", request_fn=MagicMock(return_value=mock_empty))
     assert res_empty["status"] == "not_found"
 
     mock_err = {"status": "error", "error": {"message": "Invalid API key"}}
-    res_err = lookup_acoustid(60, "fp", request_fn=MagicMock(return_value=mock_err))
+    res_err = lookup_acoustid(60, "fp", api_key="test-key", request_fn=MagicMock(return_value=mock_err))
     assert res_err["status"] == "error"
     assert "Invalid API key" in res_err["error"]
 
     def throwing_fn(*_a, **_kw):
         raise ConnectionResetError("Connection dropped")
 
-    res_throw = lookup_acoustid(60, "fp", request_fn=throwing_fn)
+    res_throw = lookup_acoustid(60, "fp", api_key="test-key", request_fn=throwing_fn)
     assert res_throw["status"] == "error"
 
 
@@ -219,7 +219,10 @@ def test_lookup_audio_file_flow(tmp_path: Path, monkeypatch):
     monkeypatch.setattr("src.services.audio_acoustid.lookup_acoustid", lambda *a, **k: dict(acoust_res))
     monkeypatch.setattr("src.services.audio_acoustid.lookup_musicbrainz_recording", lambda *a, **k: dict(mb_res))
 
-    res = lookup_audio_file(wav)
+    monkeypatch.setattr("src.services.audio_fingerprint.find_fpcalc", lambda: "fpcalc")
+    monkeypatch.setattr("src.services.audio_fingerprint.run_fpcalc", lambda *_a, **_k: (90, "AQAD-fp"))
+
+    res = lookup_audio_file(wav, api_key="test-key")
     assert res["status"] == "ok"
     assert res["album"] == "Flow Album"
     assert res["date"] == "2024"
@@ -271,9 +274,10 @@ def test_audio_tagger_nonexistent_file(tmp_path: Path):
         apply_audio_metadata(tmp_path / "ghost.mp3", AudioMetadata(title="Ghost"))
 
 
-def test_audio_tag_dialog_ui(qapp, tmp_path: Path):
+def test_audio_tag_dialog_ui(qtbot, tmp_path: Path):
     wav = _create_wav(tmp_path / "dialog_test.wav", duration=1.0)
     dialog = AudioTagDialog(wav)
+    qtbot.waitUntil(lambda: dialog.applyBtn.isEnabled(), timeout=15000)
     dialog.titleEdit.setText("Custom Title")
     dialog.artistEdit.setText("Custom Artist")
     dialog.albumEdit.setText("Custom Album")
@@ -281,6 +285,7 @@ def test_audio_tag_dialog_ui(qapp, tmp_path: Path):
     dialog.trackEdit.setText("5")
     dialog.genreEdit.setText("Synthwave")
     dialog._apply_tags()
+    qtbot.waitUntil(lambda: dialog.result() == 1, timeout=15000)
 
     assert dialog.result() == 1
     meta = read_audio_metadata(wav)
@@ -288,7 +293,7 @@ def test_audio_tag_dialog_ui(qapp, tmp_path: Path):
     assert meta.artist == "Custom Artist"
 
 
-def test_audio_tag_dialog_auto_detect(qapp, tmp_path: Path, monkeypatch):
+def test_audio_tag_dialog_auto_detect(qtbot, tmp_path: Path, monkeypatch):
     wav = _create_wav(tmp_path / "auto_detect.wav", duration=1.0)
     mock_detected = {
         "status": "ok",
@@ -303,7 +308,9 @@ def test_audio_tag_dialog_auto_detect(qapp, tmp_path: Path, monkeypatch):
     monkeypatch.setattr("src.ui.components.audio_tag_dialog.lookup_audio_file", lambda *a, **k: dict(mock_detected))
 
     dialog = AudioTagDialog(wav)
+    qtbot.waitUntil(lambda: dialog.detectBtn.isEnabled(), timeout=15000)
     dialog._auto_detect()
+    qtbot.waitUntil(lambda: "Auto-detection applied" in dialog.statusLabel.text(), timeout=15000)
     assert dialog.titleEdit.text() == "Detected Title"
     assert dialog.artistEdit.text() == "Detected Artist"
     assert dialog.albumEdit.text() == "Detected Album"

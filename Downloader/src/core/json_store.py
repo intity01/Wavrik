@@ -12,15 +12,21 @@ from typing import Any
 
 
 class JsonStore:
-    """Read and atomically write one JSON file."""
+    """Read and atomically write one JSON file.
+
+    ``unreadable`` is True after a read failed with an I/O error on a file that exists. While it
+    is set, ``write`` refuses to run so a transient lock can never replace good data with defaults.
+    """
 
     def __init__(self, path: Path):
         self.path = path
+        self.unreadable = False
         self._lock = threading.RLock()
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
     def read(self, default: Any) -> Any:
         with self._lock:
+            self.unreadable = False
             if not self.path.exists():
                 return default
             for attempt in range(3):
@@ -32,9 +38,12 @@ class JsonStore:
                 except OSError:
                     if attempt < 2:
                         time.sleep(0.05 * (attempt + 1))
+            self.unreadable = True
             return default
 
     def write(self, payload: Any) -> None:
+        if self.unreadable:
+            raise OSError("Refusing to overwrite a data file that could not be read.")
         encoded = json.dumps(payload, indent=2, ensure_ascii=False)
         temp_path = self.path.with_name(f"{self.path.name}.{uuid.uuid4().hex}.tmp")
         with self._lock:
@@ -43,20 +52,22 @@ class JsonStore:
                     handle.write(encoded)
                     handle.flush()
                     os.fsync(handle.fileno())
-                for attempt in range(5):
-                    try:
-                        os.replace(temp_path, self.path)
-                        return
-                    except PermissionError:
-                        if attempt == 4:
-                            raise
-                        time.sleep(0.05 * (attempt + 1))
+                self._replace_with_retry(temp_path)
             finally:
-                if temp_path.exists():
-                    try:
-                        temp_path.unlink(missing_ok=True)
-                    except OSError:
-                        pass
+                try:
+                    temp_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+    def _replace_with_retry(self, temp_path: Path) -> None:
+        for attempt in range(5):
+            try:
+                os.replace(temp_path, self.path)
+                return
+            except PermissionError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.05 * (attempt + 1))
 
     def backup(self) -> None:
         """Quarantine the current file when its structure is unusable."""

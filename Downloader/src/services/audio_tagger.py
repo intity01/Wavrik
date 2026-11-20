@@ -16,6 +16,8 @@ from src.services.audio_acoustid import parse_filename_heuristic
 
 COVER_EXTS = {".mp3", ".flac", ".m4a", ".mp4"}
 TAG_FIELDS = ("title", "artist", "album", "date", "track", "genre", "comment")
+_FFMPEG_TIMEOUT_SEC = 120
+_PROBE_TIMEOUT_SEC = 30
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,7 +80,10 @@ def apply_audio_metadata(
         staged = Path(tmp_dir) / f"staged{ext}"
         cmd = _build_tag_cmd(src, staged, metadata, has_cov)
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
-        proc = subprocess.run(cmd, capture_output=True, text=True, check=False, creationflags=flags)
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            check=False, creationflags=flags, timeout=_FFMPEG_TIMEOUT_SEC,
+        )
         if proc.returncode != 0:
             raise RuntimeError(f"FFmpeg tagging failed: {proc.stderr.strip()}")
         if not staged.is_file() or staged.stat().st_size <= 44:
@@ -94,7 +99,10 @@ def _probe_tags(path: Path) -> dict[str, str]:
     cmd = [probe, "-hide_banner", "-loglevel", "error", "-show_entries", "format_tags:stream_tags", "-of", "json", str(path)]
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, check=False, creationflags=flags)
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            check=False, creationflags=flags, timeout=_PROBE_TIMEOUT_SEC,
+        )
         if proc.returncode != 0 or not proc.stdout:
             return {}
         data = json.loads(proc.stdout)

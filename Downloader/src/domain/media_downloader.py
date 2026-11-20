@@ -15,6 +15,7 @@ from .download_files import map_entries, metadata, resolve_output, resolve_thumb
 from .download_support import DownloadCancelled
 from .models import DownloadPreset, DownloadResult, JobState
 from .native_downloader import NativeDownloader, native_kind
+from .turbo_settings import TurboSettings
 from .utils import percent
 from .yt_download import download as download_ytdlp
 from .yt_options import YtDownloadSettings, metadataOptions
@@ -33,6 +34,9 @@ class MediaDownloader:
 
     def validateUrl(self, url: str) -> bool:
         return validateUrl(url)
+
+    def _new_native(self) -> NativeDownloader:
+        return NativeDownloader(self._cancel, self.logger, TurboSettings.from_config(self.config))
 
     def cancelDownload(self) -> None:
         self._cancel.set()
@@ -78,7 +82,7 @@ class MediaDownloader:
         if is_audio and preset.container == "all":
             return self._download_all_audio_formats(url, output_dir, preset, progress_callback, selected)
         if selected == "native" or (selected == "auto" and native_kind(url)):
-            self._native = NativeDownloader(self._cancel, self.logger)
+            self._native = self._new_native()
             res = self._native.download(url, output_dir, preset, progress_callback)
             if res.success:
                 self.lastDownloadedFile = res.file_path

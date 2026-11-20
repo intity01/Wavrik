@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import re
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -13,25 +15,29 @@ _ACOUSTID_URL = "https://api.acoustid.org/v2/lookup"
 _MB_URL = "https://musicbrainz.org/ws/2/recording/{mbid}?fmt=json&inc=artists+releases+genres"
 _USER_AGENT = "Wavrik/2.1 ( contact@wavrik.local )"
 _last_mb_request = 0.0
+_mb_rate_lock = threading.Lock()
 _MB_CACHE: dict[str, dict[str, Any]] = {}
+_NO_KEY = {"status": "unavailable", "error": "AcoustID API key is not configured"}
+
+
+def _resolve_api_key(api_key: str = "") -> str:
+    return (api_key or os.environ.get("WAVRIK_ACOUSTID_KEY", "")).strip()
 
 
 def _rate_limit_mb(interval: float = 1.05) -> None:
     global _last_mb_request
-    wait = interval - (time.monotonic() - _last_mb_request)
-    if wait > 0:
-        time.sleep(wait)
-    _last_mb_request = time.monotonic()
+    with _mb_rate_lock:
+        wait = interval - (time.monotonic() - _last_mb_request)
+        if wait > 0:
+            time.sleep(wait)
+        _last_mb_request = time.monotonic()
 
 
 def _parse_acoustid_response(data: dict[str, Any]) -> dict[str, Any]:
     if data.get("status") != "ok":
         err = data.get("error", "Unknown error")
         return {"status": "error", "error": err.get("message", "Unknown error") if isinstance(err, dict) else str(err)}
-    results = data.get("results", [])
-    if not results:
-        return {"status": "not_found", "title": "", "artist": "", "album": "", "mbid": ""}
-    best_res = max(results, key=lambda r: float(r.get("score", 0.0)))
+    best_res = max(data.get("results", []), key=lambda r: float(r.get("score", 0.0)), default={})
     recordings = best_res.get("recordings", [])
     if not recordings:
         return {"status": "not_found", "title": "", "artist": "", "album": "", "mbid": ""}
@@ -49,8 +55,11 @@ def _parse_acoustid_response(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def lookup_acoustid(duration: int, fingerprint: str, api_key: str = "8XaBELgH", request_fn=None) -> dict[str, Any]:
-    payload = {"client": api_key, "duration": str(duration), "fingerprint": fingerprint, "meta": "recordings+releasegroups"}
+def lookup_acoustid(duration: int, fingerprint: str, api_key: str = "", request_fn=None) -> dict[str, Any]:
+    key = _resolve_api_key(api_key)
+    if not key:
+        return dict(_NO_KEY)
+    payload = {"client": key, "duration": str(duration), "fingerprint": fingerprint, "meta": "recordings+releasegroups"}
     try:
         if request_fn is not None:
             try:
@@ -103,12 +112,18 @@ def lookup_musicbrainz_recording(mbid: str, request_fn=None) -> dict[str, Any]:
         return {"status": "error", "error": str(exc)}
 
 
-def lookup_audio_file(file_path: str | Path, api_key: str = "8XaBELgH", request_fn=None) -> dict[str, Any]:
-    from src.services.audio_fingerprint import fingerprint_audio_file
-    dur, fp = fingerprint_audio_file(Path(file_path))
-    if not fp:
+def lookup_audio_file(file_path: str | Path, api_key: str = "", request_fn=None) -> dict[str, Any]:
+    from src.services.audio_fingerprint import run_fpcalc
+    key = _resolve_api_key(api_key)
+    if not key:
+        return dict(_NO_KEY)
+    try:
+        dur, fp = run_fpcalc(Path(file_path))
+    except FileNotFoundError:
+        return {"status": "unavailable", "error": "fpcalc (Chromaprint) is not installed"}
+    except (OSError, RuntimeError, ValueError):
         return {"status": "error", "error": "Could not fingerprint audio"}
-    res = lookup_acoustid(dur, fp, api_key=api_key, request_fn=request_fn)
+    res = lookup_acoustid(dur, fp, api_key=key, request_fn=request_fn)
     if res.get("status") == "ok" and res.get("mbid"):
         mb = lookup_musicbrainz_recording(res["mbid"], request_fn=request_fn)
         if mb.get("status") == "ok":

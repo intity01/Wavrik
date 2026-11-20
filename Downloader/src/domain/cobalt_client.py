@@ -6,6 +6,7 @@ import requests
 
 from src.core.config import Config
 from .cobalt_models import CobaltRequest, CobaltResponse
+from .cobalt_security import validate_instance_url
 from .models import DownloadPreset, MediaType
 
 
@@ -57,9 +58,14 @@ class CobaltClient:
         api_key: str = "",
         timeout: float = 15.0,
     ) -> None:
-        self.base_url = base_url.rstrip("/") + "/"
+        self.base_url = base_url.strip().rstrip("/") + "/"
         self.api_key = api_key.strip()
         self.timeout = timeout
+        self.is_valid = bool(validate_instance_url(self.base_url))
+
+    def _require_valid_instance(self) -> None:
+        if not self.is_valid:
+            raise CobaltError("Cobalt instance URL must use https (http is only allowed for localhost).")
 
     def _headers(self) -> dict[str, str]:
         headers = {
@@ -67,12 +73,14 @@ class CobaltClient:
             "Content-Type": "application/json",
             "User-Agent": f"WavrikMediaEngine/{Config.VERSION}",
         }
-        if self.api_key:
+        if self.api_key and self.is_valid:
             headers["Authorization"] = f"Api-Key {self.api_key}"
         return headers
 
     def is_alive(self) -> bool:
         """Probe GET / endpoint for instance reachability."""
+        if not self.is_valid:
+            return False
         try:
             resp = requests.get(
                 self.base_url,
@@ -85,12 +93,14 @@ class CobaltClient:
 
     def resolve_stream(self, req: CobaltRequest) -> CobaltResponse:
         """Resolve media stream information via Cobalt POST /."""
+        self._require_valid_instance()
         try:
             resp = requests.post(
                 self.base_url,
                 json=req.to_dict(),
                 headers=self._headers(),
                 timeout=self.timeout,
+                allow_redirects=False,
             )
             self._handle_status(resp)
             return CobaltResponse.from_dict(resp.json())
@@ -109,7 +119,7 @@ class CobaltClient:
             raise CobaltError("Cobalt API authorization failed. Check your API key.")
         if resp.status_code == 429:
             raise CobaltError("Cobalt rate limit reached. Please wait before retrying.")
-        if resp.status_code >= 400:
+        if resp.status_code >= 300:
             raise CobaltError(f"Cobalt service returned HTTP {resp.status_code}.")
 
     @staticmethod

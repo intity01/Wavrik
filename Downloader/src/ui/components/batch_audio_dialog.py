@@ -38,7 +38,7 @@ class BatchAudioDialog(QDialog):
         cfg = BatchJobConfig(
             semitones=self.semitoneSpin.value(), tempo_ratio=self.tempoSpin.value(),
             engine="r3_finer", fmt=str(self.fmtCombo.currentData() or "wav"),
-            output_dir=Path(self.destInput.text()),
+            output_dir=Path(dest) if (dest := self.destInput.text().strip()) else None,
         )
         self._signals = BatchAudioSignals()
         self._signals.itemProcessed.connect(self._on_item)

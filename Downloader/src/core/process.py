@@ -60,7 +60,10 @@ def run_cancellable_process(
     if is_cancellation_requested(cancel_check):
         raise RuntimeError("Process cancelled before execution.")
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, text=True, cwd=cwd, creationflags=flags)
+    proc = subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL,
+        text=True, encoding="utf-8", errors="replace", cwd=cwd, creationflags=flags,
+    )
     start_time = time.monotonic()
     try:
         while True:

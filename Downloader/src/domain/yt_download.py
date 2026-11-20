@@ -11,6 +11,9 @@ from .models import AttemptContext, DownloadPreset, DownloadResult, JobState
 from .utils import friendly_error
 from .yt_options import YtDownloadSettings, buildOptions
 
+MAX_ATTEMPTS = 3
+_RETRYABLE_TOKENS = ("403", "429", "forbidden", "rate limit", "too many requests", "unavailable", "try again later")
+
 
 def download(
     owner, url: str, output_dir: Path, preset: DownloadPreset,
@@ -22,45 +25,45 @@ def download(
     settings = YtDownloadSettings.from_config(owner.config)
     options = buildOptions(output_dir, preset, hook, settings, post_hook)
     ctx = AttemptContext(output_dir, preset, options, started, settings)
-    for attempt in range(3):
-        result = _attempt(owner, url, attempt, 3, ctx)
-        if result is not None:
+    result = DownloadResult(False, JobState.FAILED, error="The download could not be completed.", engine="yt-dlp")
+    for attempt in range(MAX_ATTEMPTS):
+        result, retryable = _attempt(owner, url, ctx)
+        if not retryable or result.state == JobState.CANCELLED:
             return result
-        if owner._cancel.is_set():
-            return DownloadResult(False, JobState.CANCELLED)
-        if attempt < 2:
+        if attempt < MAX_ATTEMPTS - 1:
             delay = min(settings.sleep_interval * (2 ** (attempt + 1)), settings.max_sleep_interval)
             if owner._cancel.wait(timeout=delay):
                 return DownloadResult(False, JobState.CANCELLED)
-    return DownloadResult(False, JobState.FAILED, error="The download could not be completed.", engine="yt-dlp")
+    return result
 
 
-def _attempt(
-    self, url: str, attempt: int, max_attempts: int, ctx: AttemptContext,
-) -> DownloadResult | None:
+def _attempt(owner, url: str, ctx: AttemptContext) -> tuple[DownloadResult, bool]:
+    """Run one yt-dlp attempt and return ``(result, retryable)``."""
     import yt_dlp
 
     try:
         with yt_dlp.YoutubeDL(ctx.options) as ydl:
             info = ydl.extract_info(url, download=True)
-        file_path = self._resolve_output(ctx.output_dir, info or {}, ctx.preset, ctx.started)
-        thumbnail = self._resolve_thumbnail(ctx.output_dir, ctx.started) if ctx.settings.download_thumbnail else None
-        self.lastDownloadedFile = file_path
-        if not file_path:
-            return DownloadResult(False, JobState.FAILED, error="The output file could not be found.")
-        return DownloadResult(
-            True, JobState.COMPLETED, file_path=file_path,
-            thumbnail_path=thumbnail, engine="yt-dlp",
-        )
+        return _finish(owner, ctx, info or {}), False
     except DownloadCancelled:
-        return DownloadResult(False, JobState.CANCELLED)
-    except Exception as exc:  # noqa: BLE001 - yt-dlp exposes provider-specific exceptions.
-        if self._cancel.is_set():
-            return DownloadResult(False, JobState.CANCELLED)
-        message = str(exc).lower()
-        limited = any(token in message for token in ("403", "forbidden", "rate limit", "unavailable", "try again later"))
-        if limited:
-            log_error(self.logger, f"Download retryable failure: {exc}")
-            return None
-        log_error(self.logger, f"Download failed: {exc}")
-        return DownloadResult(False, JobState.FAILED, error=friendly_error(str(exc)), engine="yt-dlp")
+        return DownloadResult(False, JobState.CANCELLED), False
+    except Exception as exc:  # yt-dlp exposes provider-specific exceptions.
+        if owner._cancel.is_set():
+            return DownloadResult(False, JobState.CANCELLED), False
+        message = str(exc)
+        retryable = any(token in message.lower() for token in _RETRYABLE_TOKENS)
+        log_error(owner.logger, f"Download {'retryable failure' if retryable else 'failed'}: {exc}")
+        failure = DownloadResult(False, JobState.FAILED, error=friendly_error(message), engine="yt-dlp")
+        return failure, retryable
+
+
+def _finish(owner, ctx: AttemptContext, info: dict) -> DownloadResult:
+    file_path = owner._resolve_output(ctx.output_dir, info, ctx.preset, ctx.started)
+    thumbnail = owner._resolve_thumbnail(ctx.output_dir, ctx.started) if ctx.settings.download_thumbnail else None
+    owner.lastDownloadedFile = file_path
+    if not file_path:
+        return DownloadResult(False, JobState.FAILED, error="The output file could not be found.")
+    return DownloadResult(
+        True, JobState.COMPLETED, file_path=file_path,
+        thumbnail_path=thumbnail, engine="yt-dlp",
+    )

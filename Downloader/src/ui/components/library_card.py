@@ -12,6 +12,7 @@ from src.ui.i18n import tr
 from src.ui.theme.key_colors import apply_key_property, key_index
 
 from .controls import ElidedLabel, ToolButton
+from .library_card_text import harmony_text, metadata_text, status_text
 
 _AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus"}
 
@@ -33,7 +34,7 @@ class LibraryCard(QWidget):
         row.setSpacing(12)
         row.addLayout(self._build_title_col(), 4)
         row.addWidget(self._build_harmony_col(), 0)
-        self.status = QLabel(_status_text(entry, self._lang), wordWrap=True)
+        self.status = QLabel(status_text(entry, self._lang), wordWrap=True)
         self.status.setProperty("status", entry.get("status", "failed"))
         row.addWidget(self.status, 2)
         self._add_actions(row)
@@ -42,7 +43,7 @@ class LibraryCard(QWidget):
         col = QVBoxLayout()
         col.setSpacing(2)
         title = ElidedLabel(self._entry.get("title", "Untitled"), objectName="SectionTitle")
-        self.metadata = ElidedLabel(_metadata_text(self._entry, self._analysis, self._lang), objectName="MutedText")
+        self.metadata = ElidedLabel(metadata_text(self._entry, self._analysis, self._lang), objectName="MutedText")
         col.addWidget(title)
         col.addWidget(self.metadata)
         return col
@@ -53,7 +54,7 @@ class LibraryCard(QWidget):
         lay = QHBoxLayout(wrap)
         lay.setContentsMargins(0, 0, 0, 0)
         self.harmonyBadge = QLabel(
-            _harmony_text(self._entry, self._analysis, self._is_audio_entry(), self._lang),
+            harmony_text(self._analysis, self._is_audio_entry(), self._lang),
             objectName="StepBadge" if self._analysis.get("key") else "NeutralBadge",
         )
         self.harmonyBadge.setProperty("keyIndex", key_index(self._analysis.get("camelot", "")))
@@ -63,8 +64,8 @@ class LibraryCard(QWidget):
 
     def setAnalysisResult(self, result: dict) -> None:
         self._analysis = result
-        self.metadata.setText(_metadata_text(self._entry, self._analysis, self._lang))
-        self.harmonyBadge.setText(_harmony_text(self._entry, self._analysis, self._is_audio_entry(), self._lang))
+        self.metadata.setText(metadata_text(self._entry, self._analysis, self._lang))
+        self.harmonyBadge.setText(harmony_text(self._analysis, self._is_audio_entry(), self._lang))
         self.harmonyBadge.setObjectName("StepBadge" if self._analysis.get("key") else "NeutralBadge")
         apply_key_property(self.harmonyBadge, self._analysis.get("camelot", ""))
 
@@ -72,9 +73,9 @@ class LibraryCard(QWidget):
         self._lang = lang
         for btn, k in self._action_buttons:
             btn.setText(tr(k, lang))
-        self.status.setText(_status_text(self._entry, lang))
-        self.metadata.setText(_metadata_text(self._entry, self._analysis, lang))
-        self.harmonyBadge.setText(_harmony_text(self._entry, self._analysis, self._is_audio_entry(), lang))
+        self.status.setText(status_text(self._entry, lang))
+        self.metadata.setText(metadata_text(self._entry, self._analysis, lang))
+        self.harmonyBadge.setText(harmony_text(self._analysis, self._is_audio_entry(), lang))
 
     def _add_actions(self, row: QHBoxLayout) -> None:
         actions = QHBoxLayout()
@@ -102,48 +103,24 @@ class LibraryCard(QWidget):
 
     def _open_audio_tools(self) -> None:
         p = Path(self._entry.get("filePath", ""))
-        self.openInAudioToolsRequested.emit(str(p)) if p.is_file() else self.status.setText(tr("lib.file_missing", self._lang))
+        if p.is_file():
+            self.openInAudioToolsRequested.emit(str(p))
+        else:
+            self._show_missing()
 
     def _open_file(self) -> None:
         p = Path(self._entry.get("filePath", ""))
-        open_path(p) if p.is_file() else self.status.setText(tr("lib.file_missing", self._lang))
+        if not p.is_file():
+            self._show_missing()
+        elif not open_path(p):
+            open_parent(p)  # Unknown or unsafe file types are revealed in their folder, never executed.
 
     def _open_folder(self) -> None:
         p = Path(self._entry.get("filePath", ""))
-        open_parent(p) if p.exists() else self.status.setText(tr("lib.file_missing", self._lang))
+        if p.exists():
+            open_parent(p)
+        else:
+            self._show_missing()
 
-
-def _harmony_text(entry: dict, analysis: dict, is_audio: bool, lang: str = "en") -> str:
-    if analysis.get("key"):
-        return f"{analysis['key']} ({analysis.get('camelot', '--')}) · {float(analysis.get('bpm', 0.0)):.1f} BPM"
-    return tr("lib.filter_audio" if is_audio else "lib.filter_video", lang)
-
-
-def _metadata_text(entry: dict, analysis: dict, lang: str = "en") -> str:
-    ts = entry.get("timestamp", "").replace("T", " ")[:16]
-    m_raw = entry.get("mediaType", "audio")
-    m_lbl = tr("lib.filter_audio" if m_raw == "audio" else "lib.filter_video", lang)
-    base = f"{ts} · {m_lbl} · {_format_size(int(entry.get('fileSize', 0) or 0), lang)}"
-    if analysis.get("key"):
-        conf = f" [{analysis['confidence']}%]" if analysis.get("confidence") else ""
-        return f"{base} · {analysis['key']} ({analysis.get('camelot', '--')}) · {float(analysis.get('bpm', 0.0)):.1f} BPM{conf}"
-    return base
-
-
-def _status_text(entry: dict, lang: str = "en") -> str:
-    raw = entry.get("status", "failed")
-    key = f"lib.filter_{raw}" if f"lib.filter_{raw}" in ("lib.filter_completed", "lib.filter_failed", "lib.filter_cancelled") else None
-    st = tr(key, lang) if key else raw.title()
-    err = entry.get("error", "")
-    return f"{st}: {err}" if err else st
-
-
-def _format_size(size: int, lang: str = "en") -> str:
-    if size <= 0:
-        return tr("lib.size_unavailable", lang)
-    val = float(size)
-    for unit in ("B", "KB", "MB", "GB"):
-        if val < 1024 or unit == "GB":
-            return f"{val:.1f} {unit}"
-        val /= 1024
-    return tr("lib.size_unavailable", lang)
+    def _show_missing(self) -> None:
+        self.status.setText(tr("lib.file_missing", self._lang))

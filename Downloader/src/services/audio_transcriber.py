@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 from typing import Any
 
 from src.services.audio_vad import AudioChunk, segment_speech_chunks
+
+_WHISPER_TIMEOUT_SEC = 180
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,18 +60,46 @@ def _transcribe_heuristic(chunks: list[AudioChunk]) -> list[LyricSegment]:
     ]
 
 
-def _run_whisper_cli(exe: str, audio_path: Path, cancel_check: Any) -> list[LyricSegment]:
-    cmd = [exe, str(audio_path), "--output_format", "json", "--model", "tiny"]
-    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+def _segment_confidence(raw: dict[str, Any]) -> float:
+    logprob = raw.get("avg_logprob")
+    if not isinstance(logprob, (int, float)):
+        return 1.0
+    return max(0.0, min(1.0, math.exp(float(logprob))))
+
+
+def _parse_whisper_json(json_path: Path) -> list[LyricSegment]:
     try:
-        if cancel_check and cancel_check():
-            return []
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False, creationflags=flags)
+        data = json.loads(json_path.read_text(encoding="utf-8", errors="replace"))
+        raw_segments = data["segments"]
+        return [
+            LyricSegment(float(s["start"]), float(s["end"]), str(s["text"]).strip(), _segment_confidence(s))
+            for s in raw_segments
+            if str(s["text"]).strip()
+        ]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise RuntimeError("whisper CLI output unsupported") from exc
+
+
+def _run_whisper_cli(exe: str, audio_path: Path, cancel_check: Any) -> list[LyricSegment]:
+    """Run openai-whisper CLI and parse the ``<stem>.json`` it writes to --output_dir.
+
+    Returns [] only when cancelled. Raises RuntimeError on failure or unsupported output.
+    """
+    if cancel_check and cancel_check():
+        return []
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+    with tempfile.TemporaryDirectory(prefix="wavrik_whisper_") as out_dir:
+        cmd = [exe, str(audio_path), "--output_format", "json", "--output_dir", out_dir, "--model", "tiny"]
+        try:
+            proc = subprocess.run(
+                cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=_WHISPER_TIMEOUT_SEC, check=False, creationflags=flags,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise RuntimeError("whisper CLI could not run") from exc
         if proc.returncode != 0:
-            return []
-        return []
-    except Exception:
-        return []
+            raise RuntimeError("whisper CLI failed")
+        return _parse_whisper_json(Path(out_dir) / f"{audio_path.stem}.json")
 
 
 def transcribe_audio(
@@ -89,7 +122,10 @@ def transcribe_audio(
     if preferred_engine == "whisper_cli" or (preferred_engine == "auto" and engines["whisper_cli"]):
         exe = shutil.which("whisper") or shutil.which("whisper.exe")
         if exe:
-            segs = _run_whisper_cli(exe, file_path, cancel_check)
+            try:
+                segs = _run_whisper_cli(exe, file_path, cancel_check)
+            except RuntimeError:
+                segs = []
             if segs:
                 return TranscriptionResult(segs, "whisper_cli", "success")
     segs = _transcribe_heuristic(chunks)

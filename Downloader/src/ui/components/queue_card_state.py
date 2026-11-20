@@ -38,4 +38,4 @@ def format_duration(seconds) -> str:
 
 
 def engine_label(engine: str) -> str:
-    return {"auto": "Auto", "native": "Native", "yt-dlp": "yt-dlp"}[engine]
+    return {"auto": "Auto", "cobalt": "Cobalt", "native": "Native", "yt-dlp": "yt-dlp"}.get(engine, "Auto")
