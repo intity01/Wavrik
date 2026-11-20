@@ -28,9 +28,10 @@
 
 มาสคอต **วาวี่ (Wavi)**: ตัวสีขาวที่มีหงอนเป็นแท่ง waveform 5 แท่ง บนพื้น gradient สีคีย์ 8A (`#EA9BB9` → `#D9497F`) ตัวไล่จากขาวไปชมพูอ่อน (`#F8DEE8`) มุมโค้ง 58/256
 
-- `Downloader/assets/icon/wavrik.svg`: ขนาด 40 px ขึ้นไป มีแก้ม ปาก และจุดสะท้อนในตา
-- `Downloader/assets/icon/wavrik-small.svg`: ขนาด 32 px ลงไป ตาใหญ่ขึ้น ไม่มีแก้มและปาก เพื่อให้อ่านออกบนแถบงานและถาดระบบ
-- สร้าง `src/core/app.ico` (16–256 px) ด้วย `python tools/build_icon.py` สคริปต์ตัดมุมโค้งเองเพราะ QtSvg ไม่รองรับ `clipPath`
+- `Downloader/assets/icon/wavrik.png` (1024 px, ต้นฉบับหลัก): ขนาด 40 px ขึ้นไป ตัวมีมือสองข้าง มีแก้ม ปาก และจุดสะท้อนในตา
+- `Downloader/assets/icon/wavrik-small.png` (1024 px): ขนาด 32 px ลงไป ไม่มีแก้มและปาก เพื่อให้อ่านออกบนแถบงานและถาดระบบ
+- `wavrik.svg` / `wavrik-small.svg` เป็นแบบเดิม ใช้เมื่อไม่มีไฟล์ PNG
+- สร้าง `src/core/app.ico` (16–256 px) ด้วย `python tools/build_icon.py` (ใช้ Python ใน `.venv` ที่มี PyQt6) สคริปต์ย่อ PNG ทีละครึ่งเพื่อให้ขนาดเล็กคมชัด
 - gradient ใช้ได้เฉพาะไอคอนแอปเท่านั้น (ดู PROJECT_RULES)
 
 ## 4-Tier Button Hierarchy

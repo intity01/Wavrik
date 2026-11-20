@@ -9,12 +9,6 @@ if not defined APP_VERSION (
 )
 
 echo [1/6] Verifying pre-build requirements for v%APP_VERSION%...
-if not exist ffmpeg.exe (
-    echo Error: ffmpeg.exe not found at repository root.
-    exit /b 1
-)
-powershell -NoProfile -Command "$expected = '228D7A8556258DE907FDB55F36850078EBC7680B84EC30D84EA02E99BEC1D1EB'; $actual = (Get-FileHash -Path 'ffmpeg.exe' -Algorithm SHA256).Hash; if ($actual -ne $expected) { Write-Error ('ffmpeg.exe SHA-256 mismatch! Expected: ' + $expected + ' but got: ' + $actual); exit 1 }" || exit /b 1
-
 set "PYTHON_EXE="
 set "PYTHON_ARGS="
 where py >nul 2>nul
@@ -42,6 +36,9 @@ if not defined PYTHON_EXE (
     echo Error: Python 3 was not found.
     exit /b 1
 )
+
+rem Downloads ffmpeg.exe, rubberband.exe and sndfile.dll if missing, and verifies their pinned SHA-256.
+"%PYTHON_EXE%" %PYTHON_ARGS% Downloader\tools\fetch_build_deps.py || exit /b 1
 
 echo [2/6] Preparing virtual environment...
 if not exist .build-venv (
