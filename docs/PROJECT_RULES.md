@@ -95,7 +95,7 @@
 - ปุ่มต้องระบุผลลัพธ์ เช่น `Download all`, `Open release`, `Change folder` ไม่ใช้ `Get started` หรือ `Learn more`
 - ห้าม emoji icon, gradient text, cream/beige AI-default, excessive rounding และ decorative motion
 - ทุก panel ต้องตอบคำถามเชิงงานอย่างน้อยหนึ่งข้อ; ถ้าไม่มี action/state/information ที่จำเป็นให้ลบออก
-- ก่อนส่งงานต้องผ่าน automated heuristic และ manual checklist ใน `AI_SLOP_REVIEW.md`
+- ก่อนส่งงานต้องผ่าน automated heuristic และ manual checklist ใน `docs/AI_SLOP_REVIEW.md`
 
 ## Testing and Definition of Done
 

@@ -1,0 +1,22 @@
+name: Set up pinned FFmpeg
+description: Download the approved FFmpeg essentials build to the repository root and verify its SHA-256.
+
+runs:
+  using: composite
+  steps:
+    - name: Download and verify FFmpeg
+      shell: pwsh
+      run: |
+        $expectedHash = "228D7A8556258DE907FDB55F36850078EBC7680B84EC30D84EA02E99BEC1D1EB"
+        if (-not (Test-Path "ffmpeg.exe")) {
+          $zip = Join-Path $env:RUNNER_TEMP "ffmpeg-8.1.1-essentials_build.zip"
+          $out = Join-Path $env:RUNNER_TEMP "ffmpeg_extracted"
+          Invoke-WebRequest -Uri "https://github.com/GyanD/codexffmpeg/releases/download/8.1.1/ffmpeg-8.1.1-essentials_build.zip" -OutFile $zip -UseBasicParsing
+          Expand-Archive -Path $zip -DestinationPath $out -Force
+          $bin = Get-ChildItem -Path $out -Filter "ffmpeg.exe" -Recurse | Select-Object -First 1
+          if (-not $bin) { throw "ffmpeg.exe not found in downloaded archive." }
+          Move-Item -Path $bin.FullName -Destination "ffmpeg.exe" -Force
+        }
+        $actualHash = (Get-FileHash -Path "ffmpeg.exe" -Algorithm SHA256).Hash
+        if ($actualHash -ne $expectedHash) { throw "ffmpeg.exe SHA-256 mismatch: expected $expectedHash, got $actualHash" }
+        Write-Host "FFmpeg verified: $actualHash"

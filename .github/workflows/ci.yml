@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            Downloader/requirements-dev.txt
+
+      - uses: ./.github/actions/setup-ffmpeg
+
+      - name: Install dependencies
+        run: python -m pip install -r Downloader/requirements-dev.txt
+
+      - name: Run quality gates
+        working-directory: Downloader
+        run: |
+          python -m compileall -q src main.py
+          python tools/check_rules.py
+          python tools/check_ai_slop.py
+          ruff check src tests
+          pytest -q

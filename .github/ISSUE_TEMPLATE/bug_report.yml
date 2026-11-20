@@ -1,0 +1,47 @@
+name: Bug report / แจ้งปัญหา
+description: Something does not work as expected.
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Settings → About, or the installer file name.
+      placeholder: "2.3.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install it?
+      options: [Setup installer, Portable zip, From source]
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 24H2"
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Remove private links, cookies and personal file paths.
+      placeholder: |
+        1. Paste a link from ...
+        2. Choose MP3 320 kbps
+        3. Click Download
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What happened vs. what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log excerpt
+      description: From %APPDATA%\Wavrik\ (check it contains no tokens or cookies).
+      render: text

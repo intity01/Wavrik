@@ -2,7 +2,13 @@
 setlocal
 cd /d "%~dp0"
 
-echo [1/6] Verifying pre-build requirements...
+for /f "usebackq delims=" %%V in (`powershell -NoProfile -Command "(Select-String -Path 'Downloader\src\core\config.py' -Pattern 'VERSION = .([0-9.]+).').Matches[0].Groups[1].Value"`) do set "APP_VERSION=%%V"
+if not defined APP_VERSION (
+    echo Error: could not read VERSION from Downloader\src\core\config.py
+    exit /b 1
+)
+
+echo [1/6] Verifying pre-build requirements for v%APP_VERSION%...
 if not exist ffmpeg.exe (
     echo Error: ffmpeg.exe not found at repository root.
     exit /b 1
@@ -55,7 +61,7 @@ echo [4/6] Building standalone executable with PyInstaller...
 ".build-venv\Scripts\pyinstaller.exe" --noconfirm --clean MediaDownloaderPRO.spec || exit /b 1
 
 echo [5/6] Creating release archives and SHA-256 checksums...
-powershell -NoProfile -Command "$zip = 'dist\MediaDownloaderPRO-v2.2.0-Windows-x64.zip'; $sha = 'dist\MediaDownloaderPRO-v2.2.0-Windows-x64.zip.sha256'; Compress-Archive -Path 'dist\MediaDownloaderPRO\*' -DestinationPath $zip -Force; (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLower() | Out-File -FilePath $sha -Encoding ascii" || exit /b 1
+powershell -NoProfile -Command "$zip = 'dist\MediaDownloaderPRO-v%APP_VERSION%-Windows-x64.zip'; $sha = 'dist\MediaDownloaderPRO-v%APP_VERSION%-Windows-x64.zip.sha256'; Compress-Archive -Path 'dist\MediaDownloaderPRO\*' -DestinationPath $zip -Force; (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLower() | Out-File -FilePath $sha -Encoding ascii" || exit /b 1
 
 set "ISCC_EXE="
 where iscc >nul 2>nul
@@ -71,8 +77,8 @@ if not defined ISCC_EXE (
 )
 if defined ISCC_EXE (
     echo Compiling Inno Setup installer...
-    "%ISCC_EXE%" installer.iss || exit /b 1
-    powershell -NoProfile -Command "$inst = 'dist\MediaDownloaderPRO-v2.2.0-Setup.exe'; $sha = 'dist\MediaDownloaderPRO-v2.2.0-Setup.exe.sha256'; (Get-FileHash -Path $inst -Algorithm SHA256).Hash.ToLower() | Out-File -FilePath $sha -Encoding ascii" || exit /b 1
+    "%ISCC_EXE%" "/DMyAppVersion=%APP_VERSION%" installer.iss || exit /b 1
+    powershell -NoProfile -Command "$inst = 'dist\MediaDownloaderPRO-v%APP_VERSION%-Setup.exe'; $sha = 'dist\MediaDownloaderPRO-v%APP_VERSION%-Setup.exe.sha256'; (Get-FileHash -Path $inst -Algorithm SHA256).Hash.ToLower() | Out-File -FilePath $sha -Encoding ascii" || exit /b 1
 )
 
 echo [6/6] Executing smoke test on standalone binary...
@@ -81,11 +87,11 @@ echo [6/6] Executing smoke test on standalone binary...
 echo ========================================================
 echo Release build and automated verification successful!
 echo Binary:    dist\MediaDownloaderPRO\MediaDownloaderPRO.exe
-echo Package:   dist\MediaDownloaderPRO-v2.2.0-Windows-x64.zip
-echo Checksum:  dist\MediaDownloaderPRO-v2.2.0-Windows-x64.zip.sha256
+echo Package:   dist\MediaDownloaderPRO-v%APP_VERSION%-Windows-x64.zip
+echo Checksum:  dist\MediaDownloaderPRO-v%APP_VERSION%-Windows-x64.zip.sha256
 if defined ISCC_EXE (
-    echo Installer: dist\MediaDownloaderPRO-v2.2.0-Setup.exe
-    echo Checksum:  dist\MediaDownloaderPRO-v2.2.0-Setup.exe.sha256
+    echo Installer: dist\MediaDownloaderPRO-v%APP_VERSION%-Setup.exe
+    echo Checksum:  dist\MediaDownloaderPRO-v%APP_VERSION%-Setup.exe.sha256
 )
 echo ========================================================
 endlocal
