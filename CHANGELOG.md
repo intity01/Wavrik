@@ -22,6 +22,7 @@
 - เวอร์ชันของ installer และไฟล์ release อ่านจาก `Config.VERSION` / git tag ที่เดียว
 
 ### Fixed
+- ตัวแก้ไข tag อ่านค่า tag เดิมไม่ได้ในแอปที่ติดตั้ง (แสดงชื่อไฟล์แทน) เพราะต้องใช้ ffprobe ซึ่งไม่ได้แนบมา ตอนนี้อ่านด้วย ffmpeg.exe ที่แนบมาได้เลย
 - Scheduled yt-dlp compatibility check ล้มทุกสัปดาห์เพราะไม่มี FFmpeg บน runner — ตอนนี้ใช้ action `setup-ffmpeg` ร่วมกับ CI และ release
 - สถิติ history ไม่ล้มเมื่อ `fileSize` เป็น `null`
 - แก้บั๊กจาก code review ด้าน network, tagging และ updater (ดู `tests/test_*_review_*.py`)
