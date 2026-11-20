@@ -15,7 +15,9 @@ from src.core.runtime import find_ffmpeg
 
 from .models import DownloadPreset, DownloadResult, JobState
 from .native_file import NativeDownloadError, download_file
-from .native_paths import target_path
+from .native_manifest import build_command, wait_for_ffmpeg
+from .native_paths import manifest_extension, reserve_target
+from .turbo_settings import TurboRequests, TurboSettings
 
 __all__ = ["NativeDownloadError", "NativeDownloader", "native_kind"]
 
@@ -35,15 +37,17 @@ def native_kind(url: str) -> str | None:
 class NativeDownloader:
     """Download permitted direct files and FFmpeg-readable HLS/DASH manifests."""
 
-    def __init__(self, cancel, logger=None):
+    def __init__(self, cancel, logger=None, turbo: TurboSettings | None = None):
         self._cancel = cancel
         self._logger = logger
+        self._turbo = turbo or TurboSettings()
         self._process: subprocess.Popen | None = None
 
     def cancel(self) -> None:
-        if self._process and self._process.poll() is None:
+        proc = self._process
+        if proc is not None and proc.poll() is None:
             try:
-                self._process.terminate()
+                proc.terminate()
             except OSError:
                 pass
 
@@ -60,7 +64,8 @@ class NativeDownloader:
         return self._download_file(url, output_dir, preset, progress)
 
     def _download_file(self, url, output_dir, preset, progress) -> DownloadResult:
-        return download_file(self._cancel, requests.get, url, output_dir, preset, progress)
+        request_get = TurboRequests(requests.get, self._turbo)
+        return download_file(self._cancel, request_get, url, output_dir, preset, progress)
 
     def _download_manifest(self, url, output_dir, preset, progress) -> DownloadResult:
         if self._cancel.is_set():
@@ -70,33 +75,33 @@ class NativeDownloader:
             return DownloadResult(False, JobState.FAILED, error="FFmpeg is required for HLS or DASH downloads. Add ffmpeg.exe beside RunApp.bat.", engine="native")
         output_dir.mkdir(parents=True, exist_ok=True)
         stem = Path(unquote(urlsplit(url).path)).stem or "stream"
-        target = target_path(output_dir, f"{stem}.{preset.container}", "", preset.container)
-        command = [
-            executable, "-y", "-nostdin",
-            "-protocol_whitelist", "http,https,tcp,tls,crypto",
-            "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
-            "-rw_timeout", "15000000", "-i", url, "-map", "0", "-c", "copy", str(target),
-        ]
+        extension = manifest_extension(preset)
+        target = reserve_target(output_dir, f"{stem}.{extension}", "", extension, reserve_final=True)
+        command = build_command(executable, url, target)
         try:
             if progress:
                 progress({"status": "downloading", "percent": 0.0, "speed": "FFmpeg", "eta": "—"})
             popen_kwargs = {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0)} if sys.platform == "win32" else {}
             self._process = subprocess.Popen(
                 command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE, text=True, **popen_kwargs,
+                stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
+                **popen_kwargs,
             )
-            _, stderr = self._process.communicate(timeout=300)
+            if self._cancel.is_set():
+                self.cancel()
+            stderr = wait_for_ffmpeg(self._process, target, self._cancel)
             return self._handle_manifest_result(target, stderr, progress)
         except subprocess.TimeoutExpired:
             return self._handle_timeout(target)
         except OSError:
+            target.unlink(missing_ok=True)
             return DownloadResult(False, JobState.FAILED, error="Could not start FFmpeg. Check that ffmpeg.exe is available.", engine="native")
         finally:
             self._process = None
 
     def _handle_timeout(self, target: Path) -> DownloadResult:
         if self._logger:
-            self._logger.warning("FFmpeg process timed out after 300 seconds.")
+            self._logger.warning("FFmpeg stopped making progress and was terminated.")
         if self._process:
             self._process.kill()
             try:
@@ -105,15 +110,17 @@ class NativeDownloader:
                 if self._logger:
                     self._logger.warning(f"FFmpeg cleanup error: {exc}")
         target.unlink(missing_ok=True)
-        return DownloadResult(False, JobState.FAILED, error="FFmpeg timed out after 300 seconds.", engine="native")
+        return DownloadResult(False, JobState.FAILED, error="The stream stopped responding and the download was stopped.", engine="native")
 
     def _handle_manifest_result(self, target: Path, stderr: str | None, progress) -> DownloadResult:
         if self._cancel.is_set():
             target.unlink(missing_ok=True)
             return DownloadResult(False, JobState.CANCELLED, engine="native")
         if self._process and self._process.returncode != 0:
+            target.unlink(missing_ok=True)
             return DownloadResult(False, JobState.FAILED, error=_manifest_error(stderr), engine="native")
         if not target.is_file() or target.stat().st_size == 0:
+            target.unlink(missing_ok=True)
             return DownloadResult(False, JobState.FAILED, error="FFmpeg finished without producing a media file.", engine="native")
         if progress:
             progress({"status": "processing", "percent": 100.0, "speed": "", "eta": ""})

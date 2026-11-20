@@ -1,7 +1,10 @@
-; Inno Setup Script for Media Downloader PRO v2.2.0
+; Inno Setup script for Wavrik · Media Downloader PRO.
+; Build with: iscc /DMyAppVersion=2.3.0 installer.iss  (the release workflow passes the tag version)
 #define MyAppName "Media Downloader PRO"
-#define MyAppVersion "2.2.0"
-#define MyAppPublisher "MediaDownloaderPRO"
+#ifndef MyAppVersion
+  #define MyAppVersion "2.3.0"
+#endif
+#define MyAppPublisher "Wavrik contributors"
 #define MyAppURL "https://github.com/intity01/Wavrik"
 #define MyAppExeName "MediaDownloaderPRO.exe"
 
@@ -16,10 +19,14 @@ AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\MediaDownloaderPRO
 DisableDirPage=no
 DisableProgramGroupPage=yes
+PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog
+CloseApplications=yes
+VersionInfoVersion={#MyAppVersion}
 LicenseFile=LICENSE
 InfoAfterFile=THIRD_PARTY_NOTICES.md
 OutputDir=dist
-OutputBaseFilename=MediaDownloaderPRO-v2.2.0-Setup
+OutputBaseFilename=MediaDownloaderPRO-v{#MyAppVersion}-Setup
 SetupIconFile=Downloader\src\core\app.ico
 Compression=lzma2/max
 SolidCompression=yes

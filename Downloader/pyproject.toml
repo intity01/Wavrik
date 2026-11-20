@@ -1,6 +1,6 @@
 [project]
 name = "wavrik"
-version = "2.2.0"
+version = "2.3.0"
 description = "Precision audio analysis, key & BPM estimation, stem separation, and media downloader."
 readme = "README.md"
 requires-python = ">=3.11"

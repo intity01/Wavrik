@@ -9,6 +9,9 @@ from PyQt6.QtCore import QObject, QRunnable, pyqtSignal
 from src.core.updater import UpdateError
 
 
+_GENERIC_ERROR = "The update could not be completed. Check your connection and disk space, then try again."
+
+
 class UpdateSignals(QObject):
     checked = pyqtSignal(object)
     downloaded = pyqtSignal(str)
@@ -27,6 +30,8 @@ class CheckUpdateWorker(QRunnable):
             self._signals.checked.emit(self._manager.checkForUpdates())
         except UpdateError as exc:
             self._signals.error.emit(str(exc))
+        except Exception:
+            self._signals.error.emit(_GENERIC_ERROR)
 
 
 class DownloadUpdateWorker(QRunnable):
@@ -47,3 +52,5 @@ class DownloadUpdateWorker(QRunnable):
             self._signals.downloaded.emit(str(path))
         except UpdateError as exc:
             self._signals.error.emit(str(exc))
+        except Exception:
+            self._signals.error.emit(_GENERIC_ERROR)

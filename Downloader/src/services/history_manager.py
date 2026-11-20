@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
 import threading
+from pathlib import Path
 from datetime import UTC, datetime
 from typing import Any
 
 from src.core.json_store import JsonStore
 from src.domain.models import HistoryItem, HistoryRecord
+
+from .history_records import local_audio_entry, migrate_entry, normalise_path, same_file, unpack_legacy_record
 
 _ANALYSIS_KEYS = ("key", "enharmonic", "camelot", "bpm", "confidence", "section_summary", "badge", "key_candidates", "peaks", "duration_sec")
 
@@ -33,18 +34,30 @@ class HistoryManager:
         if not isinstance(entries, list):
             self._store.backup()
             return []
-        return [_migrate_entry(entry) for entry in entries if isinstance(entry, dict)]
+        return [migrate_entry(entry) for entry in entries if isinstance(entry, dict)]
 
     def _supported_schema(self, value: Any) -> bool:
         return isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= self.SCHEMA_VERSION
 
     def _save(self) -> None:
+        if self._store.unreadable and not self._merge_unreadable_file():
+            return
         self._store.write({"schemaVersion": self.SCHEMA_VERSION, "entries": self.history})
+
+    def _merge_unreadable_file(self) -> bool:
+        """Retry a file that could not be read at start-up; never overwrite it while it is unreadable."""
+        stored = self._load_history()
+        if self._store.unreadable:
+            if self.logger:
+                self.logger.warning("History file is unreadable; keeping new entries in memory only.")
+            return False
+        self.history = [*self.history, *stored][:1000]
+        return True
 
     def addEntry(
         self, record_or_url: HistoryRecord | str | None = None, *args: Any, **kwargs: Any,
     ) -> HistoryItem:
-        rec = record_or_url if isinstance(record_or_url, HistoryRecord) else _unpack_legacy_record(record_or_url or "", args, kwargs)
+        rec = record_or_url if isinstance(record_or_url, HistoryRecord) else unpack_legacy_record(record_or_url or "", args, kwargs)
         entry: HistoryItem = {
             "timestamp": datetime.now(UTC).isoformat(timespec="seconds"), "url": rec.url, "title": rec.title or "Untitled",
             "mediaType": rec.media_type, "format": rec.format, "filePath": rec.file_path, "success": rec.is_success,
@@ -61,40 +74,27 @@ class HistoryManager:
         if not file_path or not isinstance(analysis, dict):
             return
         compact = {k: analysis[k] for k in _ANALYSIS_KEYS if k in analysis}
-        if not compact:
-            return
-        target_norm = os.path.normcase(os.path.abspath(str(file_path)))
+        if not compact or analysis.get("status") == "unavailable":
+            return  # A failed decode yields placeholder values that must not be cached.
+        target_norm = normalise_path(file_path)
         with self._lock:
-            changed = False
-            for e in self.history:
-                raw_path = e.get("filePath")
-                if raw_path and os.path.normcase(os.path.abspath(raw_path)) == target_norm:
-                    e["analysis"] = compact
-                    changed = True
-            if not changed:
-                p = Path(file_path)
-                sz, fmt = p.stat().st_size if p.is_file() else 0, p.suffix.lstrip(".").upper() if p.suffix else "AUDIO"
-                self.history.insert(0, {
-                    "timestamp": datetime.now(UTC).isoformat(timespec="seconds"), "url": "", "title": p.stem or "Local Audio",
-                    "mediaType": "audio", "format": fmt, "filePath": str(p), "success": True, "status": "completed",
-                    "fileSize": sz, "error": "", "thumbnailPath": "", "analysis": compact,
-                })
+            matches = [e for e in self.history if same_file(e, target_norm)]
+            for e in matches:
+                e["analysis"] = compact
+            if not matches:
+                self.history.insert(0, local_audio_entry(file_path, compact))
                 self.history = self.history[:1000]
-                changed = True
-            if changed:
-                self._save()
+            self._save()
 
     def getCachedAnalysis(self, file_path: str | Path | None) -> dict[str, Any] | None:
         if not file_path:
             return None
-        target_norm = os.path.normcase(os.path.abspath(str(file_path)))
+        target_norm = normalise_path(file_path)
         with self._lock:
             for e in self.history:
-                raw_path = e.get("filePath")
-                if raw_path and os.path.normcase(os.path.abspath(raw_path)) == target_norm:
-                    analysis = e.get("analysis")
-                    if isinstance(analysis, dict) and analysis.get("key"):
-                        return dict(analysis)
+                analysis = e.get("analysis") if same_file(e, target_norm) else None
+                if isinstance(analysis, dict) and analysis.get("key"):
+                    return dict(analysis)
         return None
 
     def getHistory(self, limit: int = 100) -> list[dict[str, Any]]:
@@ -120,30 +120,9 @@ class HistoryManager:
         return {
             "totalDownloads": len(e), "successful": sum(x.get("status") == "completed" for x in e),
             "failed": sum(x.get("status") == "failed" for x in e), "audios": sum(x.get("mediaType") == "audio" for x in e),
-            "videos": sum(x.get("mediaType") == "video" for x in e), "totalSizeMb": sum(int(x.get("fileSize", 0)) for x in e) / 1048576,
+            "videos": sum(x.get("mediaType") == "video" for x in e), "totalSizeMb": sum(int(x.get("fileSize") or 0) for x in e) / 1048576,
         }
 
     def getStatistics(self) -> dict[str, int]:
         return {"total": int(self.getStats()["totalDownloads"])}
 
-
-def _migrate_entry(entry: dict[str, Any]) -> dict[str, Any]:
-    migrated = dict(entry)
-    for old, new in (("media_type", "mediaType"), ("file_path", "filePath"), ("file_size", "fileSize")):
-        if old in migrated and new not in migrated:
-            migrated[new] = migrated.pop(old)
-    migrated.setdefault("status", "completed" if migrated.get("success") else "failed")
-    migrated.setdefault("error", "")
-    return migrated
-
-
-def _unpack_legacy_record(record_or_url: str, args: tuple[Any, ...], kwargs: dict[str, Any]) -> HistoryRecord:
-    k = kwargs.get
-    return HistoryRecord(
-        url=record_or_url or k("url", ""), title=args[0] if len(args) > 0 else k("title", "Untitled"),
-        media_type=args[1] if len(args) > 1 else k("mediaType", k("media_type", "")),
-        format=args[2] if len(args) > 2 else k("format", ""), file_path=args[3] if len(args) > 3 else k("filePath", k("file_path", "")),
-        is_success=args[4] if len(args) > 4 else k("isSuccess", k("is_success", True)),
-        file_size=args[5] if len(args) > 5 else k("fileSize", k("file_size", 0)), status=args[6] if len(args) > 6 else k("status"),
-        error=args[7] if len(args) > 7 else k("error", ""), thumbnail_path=args[8] if len(args) > 8 else k("thumbnailPath", k("thumbnail_path", "")),
-    )

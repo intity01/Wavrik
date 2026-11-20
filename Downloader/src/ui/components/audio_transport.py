@@ -27,8 +27,10 @@ def _play_track(ctrl: AudioTransportController, d: str, target: Path | None, sec
     is_b, p = (d == "B"), (ctrl._player_b if d == "B" else ctrl._player)
     src, pos = (ctrl._source_b if is_b else ctrl._current_source), (max(0, int(sec * 1000)) if (sec is not None and sec >= 0) else None)
     if p and src == target:
-        pos is not None and _call(p, "setPosition", pos)
-        _is_playing(p) or _call(p, "play")
+        if pos is not None:
+            _call(p, "setPosition", pos)
+        if not _is_playing(p):
+            _call(p, "play")
     else:
         _call(p, "stop")
         _call(p, "setSource", QUrl.fromLocalFile(str(target)))

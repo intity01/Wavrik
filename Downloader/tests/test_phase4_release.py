@@ -1,4 +1,4 @@
-"""Verification tests for Phase 4: Packaging, Inno Setup Installer, CI/CD, and Release v2.2.0."""
+"""Verification tests for Phase 4: Packaging, Inno Setup Installer, CI/CD, and Release."""
 
 from __future__ import annotations
 
@@ -17,19 +17,12 @@ from src.ui.pages.audio_tools_presenter import start_stem_separation, update_ste
 
 def test_version_bump_consistency():
     repo_root = Path(__file__).resolve().parents[2]
-    assert Config.VERSION == "2.2.0"
-
-    pyproject_path = repo_root / "Downloader" / "pyproject.toml"
-    assert pyproject_path.is_file()
-    with open(pyproject_path, "rb") as f:
-        data = tomllib.load(f)
-    assert data["project"]["version"] == "2.2.0"
-
-    readme_path = repo_root / "README.md"
-    assert readme_path.is_file()
-    readme_text = readme_path.read_text(encoding="utf-8")
-    assert "# Wavrik · Media Downloader PRO 2.2.0" in readme_text
-    assert "2.2.0" in readme_text
+    with open(repo_root / "Downloader" / "pyproject.toml", "rb") as f:
+        assert tomllib.load(f)["project"]["version"] == Config.VERSION
+    readme_text = (repo_root / "README.md").read_text(encoding="utf-8")
+    assert f"# Wavrik · Media Downloader PRO {Config.VERSION}" in readme_text
+    changelog = (repo_root / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert f"## [{Config.VERSION}]" in changelog
 
 
 def test_installer_iss_specification():
@@ -38,8 +31,8 @@ def test_installer_iss_specification():
     assert iss_path.is_file(), "installer.iss must exist at repository root"
 
     iss_text = iss_path.read_text(encoding="utf-8")
-    assert '#define MyAppVersion "2.2.0"' in iss_text
-    assert "OutputBaseFilename=MediaDownloaderPRO-v2.2.0-Setup" in iss_text
+    assert f'#define MyAppVersion "{Config.VERSION}"' in iss_text
+    assert "OutputBaseFilename=MediaDownloaderPRO-v{#MyAppVersion}-Setup" in iss_text
     assert "SetupIconFile=Downloader\\src\\core\\app.ico" in iss_text
     assert 'Name: "{autoprograms}\\{#MyAppName}"' in iss_text
     assert 'Name: "{autodesktop}\\{#MyAppName}"' in iss_text
@@ -50,14 +43,15 @@ def test_installer_iss_specification():
 
 def test_github_actions_release_workflow():
     repo_root = Path(__file__).resolve().parents[2]
-    workflow_path = repo_root / ".github" / "workflows" / "release.yml"
-    assert workflow_path.is_file()
+    ffmpeg_action = (repo_root / ".github" / "actions" / "setup-ffmpeg" / "action.yml").read_text(encoding="utf-8")
+    assert "228D7A8556258DE907FDB55F36850078EBC7680B84EC30D84EA02E99BEC1D1EB" in ffmpeg_action
+    assert "ffmpeg-8.1.1-essentials_build.zip" in ffmpeg_action
 
-    text = workflow_path.read_text(encoding="utf-8")
-    assert "228D7A8556258DE907FDB55F36850078EBC7680B84EC30D84EA02E99BEC1D1EB" in text
-    assert "ffmpeg-8.1.1-essentials_build.zip" in text
-    assert "MediaDownloaderPRO-v2.2.0-Windows-x64.zip" in text
-    assert "MediaDownloaderPRO-v2.2.0-Setup.exe" in text
+    text = (repo_root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert "./.github/actions/setup-ffmpeg" in text
+    assert "does not match Config.VERSION" in text
+    assert "MediaDownloaderPRO-v$v-Windows-x64.zip" in text
+    assert "MediaDownloaderPRO-v$v-Setup.exe" in text
     assert "ISCC.exe" in text
     assert "gh release create" in text
 

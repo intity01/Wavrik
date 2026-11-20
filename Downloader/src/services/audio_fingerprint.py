@@ -1,21 +1,32 @@
-"""Pure NumPy Chromaprint-compatible audio fingerprinting service."""
+"""Audio fingerprinting: real Chromaprint via fpcalc, plus an internal NumPy fingerprint.
+
+The NumPy fingerprint is NOT Chromaprint-compatible and must never be sent to
+AcoustID. AcoustID lookups use ``run_fpcalc``.
+"""
 
 from __future__ import annotations
 
 import base64
+import json
 from pathlib import Path
+import shutil
 import struct
+import subprocess
+import sys
 import zlib
 from typing import Sequence
 
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 
+from src.core.runtime import application_root, resource_root
+
 _N_FFT = 2048
 _HOP = 1024
 _NUM_BANDS = 33
 _MIN_FREQ = 300.0
 _MAX_FREQ = 2000.0
+_FPCALC_TIMEOUT_SEC = 60
 
 
 def _prepare_mono(samples: Sequence[float] | np.ndarray, sr: int, max_sec: int = 120) -> np.ndarray:
@@ -98,3 +109,34 @@ def fingerprint_audio_file (file_path: str | Path, max_sec: int = 120) -> tuple[
     dur = int(round(len(samples) / float(sr)))
     fp = generate_chromaprint (samples, sr)
     return dur, encode_fingerprint_base64 (fp)
+
+
+def find_fpcalc() -> str | None:
+    """Locate the Chromaprint ``fpcalc`` executable beside the app or on PATH."""
+    name = "fpcalc.exe" if sys.platform == "win32" else "fpcalc"
+    for base in (application_root(), resource_root(), application_root() / "_internal"):
+        if (base / name).is_file():
+            return str(base / name)
+    return shutil.which("fpcalc")
+
+
+def run_fpcalc(file_path: str | Path, exe: str | None = None) -> tuple[int, str]:
+    """Return (full duration in seconds, Chromaprint fingerprint) from ``fpcalc -json``."""
+    exe = exe or find_fpcalc()
+    if not exe:
+        raise FileNotFoundError("fpcalc (Chromaprint) is not installed")
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+    try:
+        proc = subprocess.run(
+            [exe, "-json", str(Path(file_path).resolve())], capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=_FPCALC_TIMEOUT_SEC, check=False, creationflags=flags,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("fpcalc timed out") from exc
+    if proc.returncode != 0:
+        raise RuntimeError("fpcalc failed")
+    data = json.loads(proc.stdout)
+    duration, chroma = int(round(float(data.get("duration", 0)))), str(data.get("fingerprint", ""))
+    if not chroma:
+        raise RuntimeError("fpcalc returned no fingerprint")
+    return duration, chroma

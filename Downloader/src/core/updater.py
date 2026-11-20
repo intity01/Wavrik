@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import uuid
 from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import urlparse
@@ -12,14 +13,12 @@ from urllib.parse import urlparse
 import requests
 
 from .update_models import ReleaseAsset, UpdateInfo
+from .updater_download import UpdateError, parse_size, safe_asset_name, stream_asset
+
+__all__ = ["API_VERSION", "UpdateError", "UpdateManager"]
 
 API_VERSION = "2026-03-10"
 _REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-_ALLOWED_HOSTS = {"github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"}
-
-
-class UpdateError(RuntimeError):
-    """Safe, user-facing update error."""
 
 
 class UpdateManager:
@@ -61,8 +60,8 @@ class UpdateManager:
         if not info.can_download_safely or not info.asset:
             raise UpdateError("This release is not available as a verified in-app download.")
         outputDir.mkdir(parents=True, exist_ok=True)
-        target = outputDir / Path(info.asset.name).name
-        temporary = target.with_suffix(target.suffix + ".part")
+        target = outputDir / safe_asset_name(info.asset.name)
+        temporary = target.with_name(f"{target.name}.{uuid.uuid4().hex[:8]}.part")
         digest = hashlib.sha256()
         try:
             self._stream_asset(info.asset, temporary, digest, progress)
@@ -89,26 +88,7 @@ class UpdateManager:
         return data if isinstance(data, dict) else {}
 
     def _stream_asset(self, asset, path: Path, digest, progress) -> None:
-        try:
-            with self._session.get(asset.url, stream=True, timeout=(5, 60), allow_redirects=True) as response:
-                response.raise_for_status()
-                if urlparse(response.url).hostname not in _ALLOWED_HOSTS:
-                    raise UpdateError("GitHub redirected the download to an unexpected host.")
-                total = min(int(response.headers.get("content-length", asset.size or 0)), 600_000_000)
-                written = 0
-                with path.open("wb") as handle:
-                    for chunk in response.iter_content(1024 * 256):
-                        if not chunk:
-                            continue
-                        written += len(chunk)
-                        if written > 600_000_000:
-                            raise UpdateError("The update package is larger than the safety limit.")
-                        handle.write(chunk)
-                        digest.update(chunk)
-                        if progress and total:
-                            progress(min(100, int(written * 100 / total)))
-        except requests.RequestException as exc:
-            raise UpdateError("The update package could not be downloaded from GitHub.") from exc
+        stream_asset(self._session, asset, path, digest, progress)
 
     def _select_asset(self, assets) -> ReleaseAsset | None:
         candidates = [item for item in assets if isinstance(item, dict) and item.get("state") == "uploaded"]
@@ -117,7 +97,8 @@ class UpdateManager:
             digest = str(item.get("digest", ""))
             url = str(item.get("browser_download_url", ""))
             if digest.startswith("sha256:") and urlparse(url).hostname == "github.com":
-                return ReleaseAsset(str(item.get("name", "update")), url, int(item.get("size", 0)), digest[7:])
+                size = parse_size(item.get("size"), "asset size")
+                return ReleaseAsset(str(item.get("name") or "update"), url, size, digest[7:])
         return None
 
     @staticmethod

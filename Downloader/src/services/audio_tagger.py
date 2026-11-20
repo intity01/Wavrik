@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import subprocess
@@ -13,9 +12,11 @@ from pathlib import Path
 
 from src.core.runtime import find_ffmpeg
 from src.services.audio_acoustid import parse_filename_heuristic
+from src.services.audio_tag_probe import probe_tags
 
 COVER_EXTS = {".mp3", ".flac", ".m4a", ".mp4"}
 TAG_FIELDS = ("title", "artist", "album", "date", "track", "genre", "comment")
+_FFMPEG_TIMEOUT_SEC = 120
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,14 +39,6 @@ def _ffmpeg_bin() -> str:
     if found := shutil.which("ffmpeg"):
         return found
     raise FileNotFoundError("FFmpeg executable not found")
-
-
-def _ffprobe_bin() -> str | None:
-    folder = find_ffmpeg()
-    exe = "ffprobe.exe" if sys.platform == "win32" else "ffprobe"
-    if folder and (p := Path(folder) / exe).is_file():
-        return str(p)
-    return shutil.which("ffprobe")
 
 
 def _build_tag_cmd(src: Path, staged: Path, meta: AudioMetadata, has_cover: bool) -> list[str]:
@@ -78,7 +71,10 @@ def apply_audio_metadata(
         staged = Path(tmp_dir) / f"staged{ext}"
         cmd = _build_tag_cmd(src, staged, metadata, has_cov)
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
-        proc = subprocess.run(cmd, capture_output=True, text=True, check=False, creationflags=flags)
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            check=False, creationflags=flags, timeout=_FFMPEG_TIMEOUT_SEC,
+        )
         if proc.returncode != 0:
             raise RuntimeError(f"FFmpeg tagging failed: {proc.stderr.strip()}")
         if not staged.is_file() or staged.stat().st_size <= 44:
@@ -87,29 +83,11 @@ def apply_audio_metadata(
     return dst
 
 
-def _probe_tags(path: Path) -> dict[str, str]:
-    probe = _ffprobe_bin()
-    if not probe:
-        return {}
-    cmd = [probe, "-hide_banner", "-loglevel", "error", "-show_entries", "format_tags:stream_tags", "-of", "json", str(path)]
-    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
-    try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, check=False, creationflags=flags)
-        if proc.returncode != 0 or not proc.stdout:
-            return {}
-        data = json.loads(proc.stdout)
-        tags = dict(data.get("streams", [{}])[0].get("tags", {}))
-        tags.update(data.get("format", {}).get("tags", {}))
-        return {str(k).lower(): str(v) for k, v in tags.items()}
-    except Exception:
-        return {}
-
-
 def read_audio_metadata(file_path: str | Path) -> AudioMetadata:
     path = Path(file_path).resolve()
     if not path.is_file():
         return AudioMetadata()
-    tags = _probe_tags(path)
+    tags = probe_tags(path)
     title = tags.get("title", "")
     artist = tags.get("artist", "") or tags.get("author", "")
     album = tags.get("album", "")

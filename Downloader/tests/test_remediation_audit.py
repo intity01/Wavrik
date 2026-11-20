@@ -97,7 +97,7 @@ def test_native_downloader_ffmpeg_command_and_creationflags(tmp_path: Path):
         target = tmp_path / "stream.mp4"
         target.write_bytes(b"data")
 
-        with patch("src.domain.native_downloader.target_path", return_value=target):
+        with patch("src.domain.native_downloader.reserve_target", return_value=target):
             downloader.download("https://example.com/playlist.m3u8", tmp_path, preset)
 
         mock_popen.assert_called_once()
@@ -106,7 +106,9 @@ def test_native_downloader_ffmpeg_command_and_creationflags(tmp_path: Path):
         assert "15000000" in cmd
         if sys.platform == "win32":
             assert mock_popen.call_args[1].get("creationflags") == getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        mock_proc.communicate.assert_called_once_with(timeout=300)
+        # Supervised by an idle timeout, not a hard 300 s cap that would kill long streams.
+        mock_proc.communicate.assert_called_once()
+        assert mock_proc.communicate.call_args[1]["timeout"] < 300
 
 
 def test_requirements_security_versions():

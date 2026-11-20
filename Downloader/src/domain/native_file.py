@@ -8,7 +8,8 @@ from pathlib import Path
 
 from src.core.config import Config
 from .models import DownloadPreset, DownloadResult, JobState
-from .native_paths import target_path
+from .native_paths import native_extension, reserve_target
+from .turbo_settings import settings_of
 from .turbo_stream import download_turbo_stream, probe_range_support
 from .utils import friendly_error
 
@@ -23,7 +24,9 @@ def download_file(cancel, request_get, url: str, output_dir: Path, preset: Downl
     try:
         with request_get(url, stream=True, timeout=(10, 60), headers={"User-Agent": f"MediaDownloaderPRO/{Config.VERSION}"}) as response:
             _validate_response(response)
-            target = target_path(output_dir, url, response.headers.get("content-disposition", ""), preset.container)
+            disposition = response.headers.get("content-disposition", "")
+            extension = native_extension(url, disposition, response.headers.get("content-type", ""), preset.container)
+            target = reserve_target(output_dir, url, disposition, extension)
             temporary = target.with_suffix(target.suffix + ".part")
             total = _parse_content_length(response.headers.get("content-length"))
             if total > MAX_FILE_BYTES:
@@ -41,7 +44,7 @@ def download_file(cancel, request_get, url: str, output_dir: Path, preset: Downl
         return DownloadResult(False, JobState.FAILED, error=_safe_error(exc), engine="native")
     except _CancelledDownload:
         return DownloadResult(False, JobState.CANCELLED, engine="native")
-    except Exception as exc:  # noqa: BLE001 - request adapters expose provider-specific exceptions.
+    except Exception as exc:  # request adapters expose provider-specific exceptions.
         return DownloadResult(False, JobState.FAILED, error=friendly_error(str(exc)), engine="native")
     finally:
         if temporary:
@@ -49,6 +52,8 @@ def download_file(cancel, request_get, url: str, output_dir: Path, preset: Downl
 
 
 def _try_turbo(cancel, request_get, url: str, temporary: Path, total: int, progress: Callable | None) -> bool:
+    if not settings_of(request_get).enabled:
+        return False
     try:
         supported, probed = probe_range_support(request_get, url)
         effective = probed or total

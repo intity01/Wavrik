@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSpinBox, QVBoxLayout, QWidget
 
+from src.domain.cobalt_security import validate_instance_url
 from src.ui.components.controls import ComboBox, LineEdit, PushButton, ToggleButton
 from src.ui.i18n import tr
 
@@ -74,12 +75,28 @@ def build_cobalt_card(page) -> QFrame:
     page.cobaltCheck.toggled.connect(lambda v: page._save("cobaltEnabled", bool(v)))
     page.cobaltUrlInput = LineEdit(page._cfg.get("cobaltUrl", "https://api.cobalt.tools/"))
     page.cobaltUrlInput.setPlaceholderText("https://api.cobalt.tools/")
-    page.cobaltUrlInput.textChanged.connect(lambda v: page._save("cobaltUrl", v.strip()))
+    page.cobaltUrlError = QLabel(objectName="InlineError")
+    page.cobaltUrlError.setWordWrap(True)
+    save_cobalt_url(page, page.cobaltUrlInput.text(), persist=False)
+    page.cobaltUrlInput.textChanged.connect(lambda v: save_cobalt_url(page, v))
     row_en, page.lblCobaltEn = settings_row("Enable Cobalt stream extraction", page.cobaltCheck)
     row_url, page.lblCobaltUrl = settings_row("Instance URL", page.cobaltUrlInput)
     layout.addLayout(row_en)
     layout.addLayout(row_url)
+    layout.addWidget(page.cobaltUrlError)
     return card
+
+
+def save_cobalt_url(page, text: str, persist: bool = True, lang: str | None = None) -> bool:
+    """Persist the Cobalt URL only when valid; otherwise show an inline error."""
+    value = validate_instance_url(text)
+    page.cobaltUrlError.setVisible(not value)
+    if not value:
+        page.cobaltUrlError.setText(tr("set.cobalt_url_invalid", lang or page._cfg.get("language", "th")))
+        return False
+    if persist:
+        page._save("cobaltUrl", value)
+    return True
 
 
 def build_turbo_card(page) -> QFrame:

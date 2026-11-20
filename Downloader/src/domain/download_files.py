@@ -59,7 +59,19 @@ def resolve_output(folder: Path, info: dict, preset: DownloadPreset, started: fl
         (mtime, path) for path in folder.glob("*")
         if _is_valid_output(path) and (mtime := _safe_mtime(path)) >= started - 2
     ]
+    recent = _prefer_title_matches(recent, str(info.get("title") or ""))
     return max(recent, key=lambda item: item[0])[1] if recent else None
+
+
+def _squash(text: str) -> str:
+    return "".join(ch for ch in text.casefold() if ch.isalnum())
+
+
+def _prefer_title_matches(recent: list[tuple[float, Path]], title: str) -> list[tuple[float, Path]]:
+    """Concurrent jobs share a folder, so favour files that carry this media's title."""
+    needle = _squash(title)
+    matches = [item for item in recent if needle and needle in _squash(item[1].stem)]
+    return matches or recent
 
 
 def _is_safe_file(path: Path) -> bool:

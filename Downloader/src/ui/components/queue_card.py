@@ -60,7 +60,7 @@ class QueueItemCard(QWidget):
 
     def setEngine(self, engine: str) -> None:
         if self._state not in ACTIVE_STATES and self._state != "completed":
-            self._engine = engine if engine in {"auto", "native", "yt-dlp"} else "auto"
+            self._engine = engine if engine in {"auto", "native", "yt-dlp", "cobalt"} else "auto"
             self._engineLabel.setText(tr("queue.engine_label", self._lang).replace("{engine}", engine_label(self._engine)))
 
     def setPreset(self, key: str) -> None:

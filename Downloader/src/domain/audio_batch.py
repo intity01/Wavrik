@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from pathlib import Path
 
 from .models import DownloadResult, JobState
-from .native_downloader import NativeDownloader
 from .presets import PRESETS
+
+STALE_PARTIAL_SECONDS = 60
 
 
 def download_all(owner, url: str, output_dir: Path, progress_callback: Callable | None, engine: str) -> DownloadResult:
     formats = _audio_formats()
+    if _uses_native(owner, url, engine):
+        formats = formats[:1]  # The native route copies the source bytes; repeating it only duplicates the file.
     files: list[Path] = []
     errors: list[str] = []
     for index, format_name in enumerate(formats):
@@ -45,9 +49,15 @@ def _preset_for(container: str):
 
 
 def _cleanup_partials(folder: Path, container: str) -> None:
+    """Remove abandoned partial files; recently touched ones may belong to a running job."""
+    cutoff = time.time() - STALE_PARTIAL_SECONDS
     for suffix in ("part", "temp", "ytdl"):
         for path in folder.glob(f"*.{container}.{suffix}"):
-            path.unlink(missing_ok=True)
+            try:
+                if path.stat().st_mtime < cutoff:
+                    path.unlink(missing_ok=True)
+            except OSError:
+                continue
 
 
 def _progress_callback(callback: Callable | None, index: int, total: int) -> Callable | None:
@@ -66,9 +76,13 @@ def _progress_callback(callback: Callable | None, index: int, total: int) -> Cal
     return report
 
 
+def _uses_native(owner, url: str, engine: str) -> bool:
+    return engine == "native" or (engine == "auto" and bool(owner._native_kind(url)))
+
+
 def _download_one(owner, url, output_dir, preset, callback, engine):
-    if engine == "native" or (engine == "auto" and owner._native_kind(url)):
-        owner._native = NativeDownloader(owner._cancel, owner.logger)
+    if _uses_native(owner, url, engine):
+        owner._native = owner._new_native()
         return owner._native.download(url, output_dir, preset, callback)
     return owner._download_ytdlp(url, output_dir, preset, callback)
 

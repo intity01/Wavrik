@@ -18,7 +18,8 @@ def update_stem_guidance(page) -> None:
         return
     mode = str(page.stemModeCombo.currentData() or "htdemucs")
     needed = mode in {"htdemucs", "htdemucs_ft", "roformer_ensemble", "roformer_fast"} and not is_separator_available()
-    page.stemNoticeLabel.setText(tr("at.ai_separator_required", getattr(page, "_lang", "en"))) if needed else None
+    if needed:
+        page.stemNoticeLabel.setText(tr("at.ai_separator_required", getattr(page, "_lang", "en")))
     page.stemNoticeLabel.setVisible(needed)
 
 
@@ -84,21 +85,20 @@ def start_stem_separation(page) -> None:
     if mode in {"htdemucs", "htdemucs_ft", "roformer_ensemble", "roformer_fast"} and not is_separator_available():
         msg = tr("at.ai_separator_required", getattr(page, "_lang", "en"))
         page.statusLabel.setText(msg)
-        hasattr(page, "stemNoticeLabel") and (page.stemNoticeLabel.setText(msg) or page.stemNoticeLabel.show())
+        if hasattr(page, "stemNoticeLabel"):
+            page.stemNoticeLabel.setText(msg)
+            page.stemNoticeLabel.show()
         return
     from .audio_tools_stems import dispatch_stem_separation
     dispatch_stem_separation(page, mode)
 
 
-def on_stems_ready(page, vocals_str: str, inst_str: str, mode_used: str) -> None:
-    from .audio_tools_stems import handle_2stems_ready
-    handle_2stems_ready(page, vocals_str, inst_str, mode_used)
-
 
 def start_pitch_render(page, target: Path, fmt: str, is_preview: bool) -> None:
     from src.ui.workers.audio_worker import AudioToolSignals, PitchJob, RenderPitchWorker
     page._busy, page._signals = True, AudioToolSignals()
-    page.statusLabel.setText(tr("at.rendering", getattr(page, "_lang", "en"))) or page.exportBtn.setEnabled(False)
+    page.statusLabel.setText(tr("at.rendering", getattr(page, "_lang", "en")))
+    page.exportBtn.setEnabled(False)
     page._signals.rendered.connect(page._on_rendered)
     page._signals.error.connect(page._on_error)
     job = PitchJob(page._source, target, page.semitoneSpin.value(), str(page.engineCombo.currentData() or "r3_finer"), fmt, is_preview, page._tempo_ratio(), page.waveformWidget.seekPosition())
@@ -110,22 +110,27 @@ def handle_pitch_rendered(page, path_str: str, is_preview: bool) -> None:
     page._busy, out = False, Path(path_str)
     page.exportBtn.setEnabled(True)
     if is_preview:
-        page.transport.setSlotB(out) or page.transport.playSlot("B")
+        page.transport.setSlotB(out)
+        page.transport.playSlot("B")
         page.statusLabel.setText(f"Playing Shifted Preview (B): {out.name}")
         return
     page._lastExport = out
-    page.openFolderBtn.show() or page.statusLabel.setText(f"Exported: {out.name}")
-    page._hist and out.is_file() and page._hist.addEntry("", out.stem, "audio", out.suffix.lstrip(".").upper(), str(out), True, out.stat().st_size, status="completed")
+    page.openFolderBtn.show()
+    page.statusLabel.setText(f"Exported: {out.name}")
+    if page._hist and out.is_file():
+        page._hist.addEntry("", out.stem, "audio", out.suffix.lstrip(".").upper(), str(out), True, out.stat().st_size, status="completed")
     page.fileExported.emit(str(out))
 
 
 def set_controls_enabled(page, enabled: bool) -> None:
     btns = [page.reanalyzeBtn, page.separateStemsBtn, page.previewOrigBtn, page.previewShiftedBtn, page.stopAudioBtn, page.exportBtn, *page.candButtons, *page.camelotButtons]
-    hasattr(page, "tagBtn") and btns.append(page.tagBtn)
+    if hasattr(page, "tagBtn"):
+        btns.append(page.tagBtn)
     for w in btns:
         w.setEnabled(enabled)
-    for a in ("djCrossfader", "djDeckA", "djDeckB"):
-        hasattr(page, a) and getattr(page, a).setEnabled(enabled)
+    for name in ("djCrossfader", "djDeckA", "djDeckB"):
+        if hasattr(page, name):
+            getattr(page, name).setEnabled(enabled)
 
 
 def compute_tempo_ratio(page) -> float:
@@ -139,9 +144,6 @@ def build_export_name(page, fmt: str) -> str:
 
 
 def open_export_folder(page) -> None:
-    page._lastExport and page._lastExport.exists() and open_parent(page._lastExport)
+    if page._lastExport and page._lastExport.exists():
+        open_parent(page._lastExport)
 
-
-def handle_dj_sync(page, deck: str) -> None:
-    from .audio_tools_dj import handle_dj_sync as _sync
-    _sync(page, deck)

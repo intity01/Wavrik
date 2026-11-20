@@ -217,7 +217,7 @@ def test_a12_native_downloader_ffmpeg_timeout_logging(tmp_path: Path):
 
     res = downloader._handle_timeout(target)
     assert res.success is False
-    assert "timed out" in res.error
+    assert "stopped responding" in res.error
     assert not target.exists()
     assert mock_logger.warning.call_count >= 2
 
